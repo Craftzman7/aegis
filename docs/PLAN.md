@@ -1,3 +1,5 @@
+> **Historical:** this is the original design. Current behaviour and decisions differ in places: the AI model, the tiers, and the dashboard. See [AGENTS.md](../AGENTS.md), [PROTOCOL.md](PROTOCOL.md) and [OPERATIONS.md](OPERATIONS.md).
+
 # Aegis — Autonomous SOC: on-box agent + Cloudflare LLM analyst
 
 ## Context
