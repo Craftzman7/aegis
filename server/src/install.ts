@@ -62,7 +62,12 @@ EOF_UNIT
 echo "==> enrolling"
 "$BIN" enroll --server "$SERVER" --token "$TOKEN"
 
-systemctl daemon-reload
-systemctl enable --now aegis-agent
-echo "==> aegis-agent installed and running"
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl enable --now aegis-agent
+  echo "==> aegis-agent installed and running"
+else
+  echo "==> enrolled; systemd not running here, so start the agent yourself:"
+  echo "    nohup $BIN run --config /etc/aegis/agent.yaml >/var/log/aegis-agent.log 2>&1 &"
+fi
 `;
