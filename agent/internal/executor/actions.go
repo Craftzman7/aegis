@@ -144,10 +144,48 @@ func (e *Executor) killProcess(ctx context.Context, cmd Command) (map[string]any
 			return nil, "", reject("start_time mismatch: pid %d was reused", pid)
 		}
 	}
+	// Kill the whole tree: an attacker's payload is often a wrapper
+	// (bash -c / timeout / nohup) whose children keep running if only the
+	// named pid dies. Descendants are killed first so they cannot be
+	// re-parented and escape, then the target itself.
+	desc := e.descendants(pid)
+	var killedDesc []int
+	for i := len(desc) - 1; i >= 0; i-- {
+		if d := desc[i]; d != e.cfg.SelfPID && e.cfg.Kill(d) == nil {
+			killedDesc = append(killedDesc, d)
+		}
+	}
 	if err := e.cfg.Kill(pid); err != nil {
 		return nil, "", err
 	}
-	return map[string]any{"killed": true, "pid": pid, "image": pi.ImagePath()}, "", nil
+	return map[string]any{"killed": true, "pid": pid, "image": pi.ImagePath(), "descendants_killed": killedDesc}, "", nil
+}
+
+// descendants returns all transitive children of pid in BFS order (parents
+// before children). It never includes pid 1 or the agent itself.
+func (e *Executor) descendants(pid int) []int {
+	children := map[int][]int{}
+	for _, c := range collector.ListPIDs(e.cfg.ProcRoot) {
+		if pi, ok := collector.ReadProc(e.cfg.ProcRoot, c); ok {
+			children[pi.PPID] = append(children[pi.PPID], c)
+		}
+	}
+	var out []int
+	seen := map[int]bool{pid: true}
+	queue := []int{pid}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, c := range children[cur] {
+			if seen[c] || c <= 1 || c == e.cfg.SelfPID {
+				continue
+			}
+			seen[c] = true
+			out = append(out, c)
+			queue = append(queue, c)
+		}
+	}
+	return out
 }
 
 const clkTck = 100
@@ -258,6 +296,13 @@ func (e *Executor) blockIP(ctx context.Context, cmd Command) (map[string]any, st
 	}
 	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() {
 		return nil, "", reject("refusing to block %s", ip)
+	}
+	// Private ranges are allowed (internal attackers), but never the host's own
+	// addresses or its default gateway: that would cut the host off the network.
+	for _, own := range e.protectedIPs() {
+		if own.Equal(ip) {
+			return nil, "", reject("refusing to block %s: it is this host's own address or default gateway", ip)
+		}
 	}
 	srv, _ := e.serverIPs(ctx)
 	if srv[ip.String()] {
@@ -553,4 +598,41 @@ func (e *Executor) undo(ctx context.Context, rec RollbackRecord) error {
 		return os.Chmod(orig, os.FileMode(mode))
 	}
 	return fmt.Errorf("no rollback for action %q", rec.Action)
+}
+
+// protectedIPs returns this host's interface addresses plus its IPv4 default
+// gateways (from /proc/net/route).
+func (e *Executor) protectedIPs() []net.IP {
+	var out []net.IP
+	if e.cfg.LocalIPs != nil {
+		out = append(out, e.cfg.LocalIPs()...)
+	} else if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok {
+				out = append(out, n.IP)
+			}
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(e.cfg.ProcRoot, "net", "route")); err == nil {
+		out = append(out, parseDefaultGateways(string(b))...)
+	}
+	return out
+}
+
+// parseDefaultGateways extracts gateways of default routes (Destination 00000000)
+// from /proc/net/route. Addresses are little-endian hex.
+func parseDefaultGateways(route string) []net.IP {
+	var out []net.IP
+	for i, line := range strings.Split(route, "\n") {
+		f := strings.Fields(line)
+		if i == 0 || len(f) < 3 || f[1] != "00000000" {
+			continue
+		}
+		v, err := strconv.ParseUint(f[2], 16, 32)
+		if err != nil || v == 0 {
+			continue
+		}
+		out = append(out, net.IPv4(byte(v), byte(v>>8), byte(v>>16), byte(v>>24)))
+	}
+	return out
 }

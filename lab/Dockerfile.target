@@ -6,7 +6,7 @@
 # enrolls the agent once, then execs the agent.
 #
 # The agent binary is NOT baked into the image. docker-compose.yml bind-mounts
-# ../agent/bin/aegis-agent-linux-<arch> read-only at /usr/local/bin/aegis-agent,
+# ../agent/dist/aegis-agent-linux-<arch> read-only at /usr/local/bin/aegis-agent,
 # so rebuilding the agent does not require rebuilding this image.
 
 FROM ubuntu:24.04

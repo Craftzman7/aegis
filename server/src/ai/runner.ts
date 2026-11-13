@@ -11,7 +11,21 @@ function gatewayOpts(env: Env): { gateway?: { id: string } } {
 export async function aiRunRaw(env: Env, model: string, input: Record<string, unknown>): Promise<unknown> {
   // Model is configurable (AI_MODEL var), so it cannot be a literal in AiModels; the binding validates it at runtime.
   const run = env.AI.run.bind(env.AI) as (m: string, i: Record<string, unknown>, o?: Record<string, unknown>) => Promise<unknown>;
-  return run(model, input, gatewayOpts(env));
+  const opts = gatewayOpts(env);
+  if (!opts.gateway) return run(model, input);
+  try {
+    return await run(model, input, opts);
+  } catch (err) {
+    // A missing/misconfigured gateway (e.g. code 2001) must not blind the SOC: fall back to a direct call.
+    if (!isGatewayConfigError(err)) throw err;
+    console.warn(JSON.stringify({ message: "AI Gateway unavailable, calling Workers AI directly", gateway: env.AI_GATEWAY_ID, error: String(err) }));
+    return run(model, input);
+  }
+}
+
+function isGatewayConfigError(err: unknown): boolean {
+  const s = String((err as { message?: string })?.message ?? err);
+  return /AiGateway|\b2001\b|configure AI Gateway/i.test(s);
 }
 
 export async function runChat(

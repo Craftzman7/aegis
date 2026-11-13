@@ -119,6 +119,7 @@ type Config struct {
 	LogDir     string
 	Now        func() time.Time
 	Resolver   func(ctx context.Context, host string) ([]net.IP, error)
+	LocalIPs   func() []net.IP // host interface addresses (default net.InterfaceAddrs)
 	Kill       func(pid int) error
 	SelfPID    int
 	SelfUID    int

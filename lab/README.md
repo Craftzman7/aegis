@@ -13,14 +13,14 @@ A local Linux target (two Ubuntu 24.04 containers running the Aegis agent), an a
 
 ## 1. Build the agent
 
-The agent is built from `agent/` into `agent/bin/` (gitignored). Pick the architecture of your Docker host:
+The agent is built from `agent/` into `agent/dist/` (gitignored). Pick the architecture of your Docker host:
 
 ```sh
 make -C agent build-linux-arm64   # Apple Silicon
 make -C agent build-linux-amd64   # Intel Mac or Linux x86_64
 ```
 
-This produces `agent/bin/aegis-agent-linux-arm64` or `agent/bin/aegis-agent-linux-amd64`. Compose bind-mounts that file read-only into each target. Rebuild the agent and then `docker compose ... restart target1 target2` to pick up changes. You do not need to rebuild the image.
+This produces `agent/dist/aegis-agent-linux-arm64` or `agent/dist/aegis-agent-linux-amd64`. Compose bind-mounts that file read-only into each target. Rebuild the agent and then `docker compose ... restart target1 target2` to pick up changes. You do not need to rebuild the image.
 
 ## 2. Signing key and local server
 
@@ -166,7 +166,7 @@ Stop the server with Ctrl-C in the `wrangler dev` terminal.
 
 ## Troubleshooting
 
-- **`agent binary ... is missing`** in the target logs: the build step (1) did not run, or `AEGIS_ARCH` does not match the file name. Check `ls agent/bin/`.
+- **`agent binary ... is missing`** in the target logs: the build step (1) did not run, or `AEGIS_ARCH` does not match the file name. Check `ls agent/dist/`.
 - **Container will not start with a bind mount error**: the same cause. `create_host_path: false` is deliberate, so Docker does not create an empty directory in its place.
 - **Enrollment fails with a connection error**: the target cannot reach `host.docker.internal:8787`. Confirm that `wrangler dev` was started with `--ip 0.0.0.0`. Docker Desktop on macOS needs the `host-gateway` mapping from compose, which is already set.
 - **`not enrolled and AEGIS_TOKEN is empty`**: the token variable is not set, or the volume already holds an agent key from an earlier run. Use `down -v` to start from scratch, or ignore the message if the agent is already enrolled.

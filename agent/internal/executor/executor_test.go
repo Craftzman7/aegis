@@ -52,10 +52,14 @@ func newEnv(t *testing.T) *env {
 	os.WriteFile(filepath.Join(dir, "passwd"), []byte("root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000::/home/alice:/bin/bash\ntoor:x:0:0::/root:/bin/bash\nagent:x:999:999::/var/lib/aegis:/bin/false\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "group"), []byte("sudo:x:27:alice\nalice:x:1000:\n"), 0o644)
 	os.WriteFile(filepath.Join(e.proc, "stat"), []byte("cpu 1 2 3\nbtime 1000000\n"), 0o644)
+	os.MkdirAll(filepath.Join(e.proc, "net"), 0o755)
+	// default route via 192.168.97.1 (little-endian hex 0161A8C0)
+	os.WriteFile(filepath.Join(e.proc, "net", "route"), []byte("Iface\tDestination\tGateway \tFlags\nnet0\t00000000\t0161A8C0\t0003\nnet0\t0061A8C0\t00000000\t0001\n"), 0o644)
 	ex, err := New(Config{
 		HostID: "host-1", ServerPub: priv.Public().(ed25519.PublicKey), DataDir: filepath.Join(dir, "data"),
 		ServerURL: "https://aegis.example.net", Runner: e.run,
 		Policy:   func() policy.Body { return policy.Body{ServerEndpoints: []string{"203.0.113.5"}} },
+		LocalIPs: func() []net.IP { return []net.IP{net.ParseIP("192.168.97.2")} },
 		ProcRoot: e.proc, PasswdPath: filepath.Join(dir, "passwd"), GroupPath: filepath.Join(dir, "group"), LogDir: filepath.Join(dir, "log"),
 		Now:      func() time.Time { return e.now },
 		Resolver: func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("198.51.100.20")}, nil },
@@ -190,12 +194,16 @@ func TestBlockIP(t *testing.T) {
 		{"ip": "1.2.3.4", "ttl_seconds": 604801},
 		{"ip": "1.2.3.4", "ttl_seconds": 0},
 		{"ip": "1.2.3.4; reboot", "ttl_seconds": 60},
+		{"ip": "192.168.97.1", "ttl_seconds": 60}, // default gateway
+		{"ip": "192.168.97.2", "ttl_seconds": 60}, // own address
 	} {
 		e.want(e.do("block_ip", p), StatusRejected)
 	}
 	if len(e.run.calls) != 0 {
 		t.Fatal("nft ran for refused input")
 	}
+	e.want(e.do("block_ip", map[string]any{"ip": "192.168.97.3", "ttl_seconds": 60}), StatusSucceeded) // internal attacker is blockable
+	e.run.calls = nil
 	res := e.do("block_ip", map[string]any{"ip": "1.2.3.4", "ttl_seconds": 3600})
 	e.want(res, StatusSucceeded)
 	c := e.run.calls[0]
@@ -320,6 +328,34 @@ func TestKillProcess(t *testing.T) {
 	ts := time.Unix(1000000, 0).Add(7777 * time.Second / 100).UTC().Format(time.RFC3339)
 	e.want(e.do("kill_process", map[string]any{"pid": 500, "start_time": ts}), StatusSucceeded)
 	e.want(e.do("kill_process", map[string]any{"pid": 500, "start_time": "2001-01-01T00:00:00Z"}), StatusRejected)
+}
+
+func TestKillProcessKillsTree(t *testing.T) {
+	// bash -c wrapper (52) -> timeout (58) -> bash -i (59) -> sleep (60); agent (4242) child of 59 must survive
+	e := newEnv(t)
+	writeProc(t, e.proc, 52, 1, "/usr/bin/bash", "bash -c timeout 180 bash -i", 100)
+	writeProc(t, e.proc, 58, 52, "/usr/bin/timeout", "timeout 180 bash -i", 101)
+	writeProc(t, e.proc, 59, 58, "/usr/bin/bash", "bash -i", 102)
+	writeProc(t, e.proc, 60, 59, "/usr/bin/sleep", "sleep 99", 103)
+	writeProc(t, e.proc, 4242, 59, "/usr/bin/aegis-agent", "aegis-agent run", 1)
+	writeProc(t, e.proc, 70, 1, "/usr/sbin/sshd", "sshd", 5)
+	res := e.do("kill_process", map[string]any{"pid": 52})
+	e.want(res, StatusSucceeded)
+	got := map[int]bool{}
+	for _, k := range e.killed {
+		got[k] = true
+	}
+	for _, want := range []int{52, 58, 59, 60} {
+		if !got[want] {
+			t.Errorf("pid %d not killed: %v", want, e.killed)
+		}
+	}
+	if got[4242] || got[70] || got[1] {
+		t.Fatalf("killed protected/unrelated pid: %v", e.killed)
+	}
+	if e.killed[len(e.killed)-1] != 52 {
+		t.Fatalf("target must be killed last (descendants first): %v", e.killed)
+	}
 }
 
 func TestCollectEvidence(t *testing.T) {

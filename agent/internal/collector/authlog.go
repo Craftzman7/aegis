@@ -250,9 +250,18 @@ func (a *AuthLog) journalctl() string {
 	if a.JournalctlPath != "" {
 		return a.JournalctlPath
 	}
+	// The binary alone is not enough: containers and non-systemd hosts often
+	// ship journalctl without a running journald, and `journalctl -f` would
+	// then block forever instead of letting us fall back to the log files.
+	if _, err := os.Stat(journaldSocket); err != nil {
+		return ""
+	}
 	p, _ := exec.LookPath("journalctl")
 	return p
 }
+
+// journaldSocket exists only while systemd-journald is running.
+var journaldSocket = "/run/systemd/journal/socket"
 
 func (a *AuthLog) runJournal(ctx context.Context, path string, out chan<- event.Event) error {
 	cmd := exec.CommandContext(ctx, path, "-f", "-n", "0", "-o", "json", "--no-pager",

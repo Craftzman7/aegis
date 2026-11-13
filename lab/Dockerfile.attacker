@@ -7,5 +7,5 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      hydra sshpass netcat-openbsd curl python3 procps ca-certificates \
+      hydra sshpass openssh-client netcat-openbsd curl python3 procps ca-certificates \
  && rm -rf /var/lib/apt/lists/*

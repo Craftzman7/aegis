@@ -81,7 +81,7 @@ describe("console API", () => {
     const r = await consoleReq(f.env, "POST", "/actions", { host_id: f.host.id, action: "kill_process", params: { pid: 4242 }, incident_id: f.inc.id });
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ state: "dispatched", proposed_by: "human:dev@local", tier: 1 });
-    expect((await consoleReq(f.env, "POST", "/actions", { host_id: f.host.id, action: "block_ip", params: { ip: "10.0.0.1" } })).status).toBe(422);
+    expect((await consoleReq(f.env, "POST", "/actions", { host_id: f.host.id, action: "block_ip", params: { ip: "127.0.0.1" } })).status).toBe(422);
     expect((await consoleReq(f.env, "POST", "/actions", { host_id: f.host.id, action: "disable_user", params: { username: "root" } })).status).toBe(422);
     expect((await consoleReq(f.env, "POST", "/actions", { host_id: "nope", action: "kill_process", params: { pid: 3 } })).status).toBe(404);
     const aud = (await (await consoleReq(f.env, "GET", "/audit?actor=human&limit=50")).json()) as J[];

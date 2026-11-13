@@ -27,7 +27,7 @@ services:
       # Agent binary, read-only, from the host build output. create_host_path: false stops
       # Docker from silently creating a directory if the binary has not been built.
       - type: bind
-        source: ../agent/bin/aegis-agent-linux-${AEGIS_ARCH:-arm64}
+        source: ../agent/dist/aegis-agent-linux-${AEGIS_ARCH:-arm64}
         target: /usr/local/bin/aegis-agent
         read_only: true
         bind:
@@ -55,7 +55,7 @@ services:
       AEGIS_TOKEN: ${AEGIS_TOKEN_TARGET2:-}
     volumes:
       - type: bind
-        source: ../agent/bin/aegis-agent-linux-${AEGIS_ARCH:-arm64}
+        source: ../agent/dist/aegis-agent-linux-${AEGIS_ARCH:-arm64}
         target: /usr/local/bin/aegis-agent
         read_only: true
         bind:

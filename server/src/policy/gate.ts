@@ -133,6 +133,27 @@ export function parseIp(ip: string): { v: 4; b: number[] } | { v: 6; s: string }
 }
 
 /** True for loopback, private, link-local, CGNAT, multicast, unspecified, reserved: never blockable. */
+/**
+ * Never blockable: loopback, link-local, multicast, unspecified, reserved/doc ranges.
+ * RFC1918 / CGNAT / ULA ARE blockable (internal attackers and lateral movement are real);
+ * block_ip is tier 1, so a human always approves those.
+ */
+export function isUnblockableIp(ip: string): boolean {
+  const p = parseIp(ip);
+  if (!p) return true;
+  if (p.v === 4) {
+    const [a, b] = p.b as [number, number, number, number];
+    return a === 0 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  }
+  const s = p.s;
+  if (s === "::" || s === "::1") return true;
+  const mapped = /^(?:0*:)*:?ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s);
+  if (mapped) return isUnblockableIp(mapped[1]!);
+  const first = s.split(":")[0] ?? "";
+  const hx = first === "" ? 0 : parseInt(first, 16);
+  return (hx & 0xffc0) === 0xfe80 || (hx & 0xff00) === 0xff00 || s.startsWith("2001:db8");
+}
+
 export function isNonPublicIp(ip: string): boolean {
   const p = parseIp(ip);
   if (!p) return true;
@@ -283,7 +304,7 @@ function normalize(action: string, raw: unknown, ctx: GateContext): Norm {
       if (!r.success) return fail(r.error);
       const ip = r.data.ip.trim();
       if (!parseIp(ip)) return { ok: false, reason: "not a valid IP address" };
-      if (isNonPublicIp(ip)) return { ok: false, reason: "refusing to block loopback/private/link-local/reserved address" };
+      if (isUnblockableIp(ip)) return { ok: false, reason: "refusing to block loopback/link-local/multicast/reserved address" };
       if (endpointHosts(ctx.serverEndpoints).includes(ip.toLowerCase())) return { ok: false, reason: "refusing to block an Aegis server endpoint" };
       return { ok: true, params: { ip, ttl_seconds: r.data.ttl_seconds }, tier: 1 };
     }
