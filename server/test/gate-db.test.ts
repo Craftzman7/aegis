@@ -36,4 +36,22 @@ describe("buildGateContext tier-1 rate count", () => {
     const ctx3 = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
     expect(ctx3.openKeys.size).toBe(0);
   });
+
+  it("tier-1 count is the approval queue: approved/executed proposals free their slot", async () => {
+    const { env } = mkEnv();
+    const h = await enrollHost(env);
+    const add = async (path: string, state: string, approvedBy: string | null, updated = new Date().toISOString()) => {
+      const a = await createAction(env, { id: crypto.randomUUID(), incident_id: null, host_id: h.id, action: "quarantine_file", params: { path }, tier: 1, kind: "command", state: "proposed", proposed_by: "ai" });
+      await env.DB.prepare("UPDATE actions SET state=?, approved_by=?, updated_at=? WHERE id=?").bind(state, approvedBy, updated, a.id).run();
+    };
+    // Earlier containment the human approved and the agent executed (what exhausted the old hourly limit).
+    for (let i = 0; i < 6; i++) await add(`/tmp/done${i}`, "succeeded", "human:a@b.c");
+    await add("/tmp/old-reject", "rejected", "human:a@b.c", new Date(Date.now() - 2 * 3600_000).toISOString());
+    const ctx = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
+    expect(ctx.tier1LastHour).toBe(0);
+    await add("/tmp/waiting", "proposed", null);
+    await add("/tmp/recent-reject", "rejected", "human:a@b.c");
+    const ctx2 = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
+    expect(ctx2.tier1LastHour).toBe(2);
+  });
 });

@@ -58,7 +58,7 @@ The `audit_log` table is the ground truth for who did what and when.
 | Action stuck in `dispatched`, but the audit log shows `action.succeeded` | A state overwrite. Check that `dispatchAction` still marks the action dispatched before pushing. |
 | Incident stuck in `investigating` for about 5 min, then evidence `expired` | Waiting on results that never arrived: agent offline, or the command expired. Check the host's `last_seen` and the agent logs. |
 | AI requests rejected with `invalid params` | The model guessed values (null PID, hostname as IP). The `reject_reason` is fed back on the next round. |
-| `gate.rejected: rate limit` | More than 5 tier-1 or 20 tier-0 distinct proposals per host per hour. `collect_evidence` doesn't count. |
+| `gate.rejected: rate limit` | Tier 1: 5 proposals already waiting for approval or rejected in the last hour on this host; clear the Approvals queue. Tier 0: 20 per host per hour, not counting `collect_evidence`. |
 | Self-inflicted incident right after a quarantine or rollback | `ExpectChange` didn't reach the engine. Check the agent version on the host. |
 | `ai.failed: AiGatewayError 2001` | The gateway doesn't exist. This should fall back automatically; check `src/ai/runner.ts`. |
 

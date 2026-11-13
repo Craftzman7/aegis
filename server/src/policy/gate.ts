@@ -370,7 +370,7 @@ export function gate(req: GateRequest, ctx: GateContext): GateDecision {
     if (n.tier === 0 && req.action !== "collect_evidence" && ctx.tier0LastHour >= LIMITS.tier0PerHostPerHour)
       return { ...rejected(req, `rate limit: ${LIMITS.tier0PerHostPerHour} tier-0 actions per host per hour`, 0), normalizedParams: n.params };
     if (n.tier === 1 && ctx.tier1LastHour >= LIMITS.tier1PerHostPerHour)
-      return { ...rejected(req, `rate limit: ${LIMITS.tier1PerHostPerHour} tier-1 proposals per host per hour`, 1), normalizedParams: n.params };
+      return { ...rejected(req, `rate limit: ${LIMITS.tier1PerHostPerHour} tier-1 proposals pending or recently rejected on this host`, 1), normalizedParams: n.params };
   }
 
   const requiresApproval = ctx.source === "ai" && (n.tier === 1 || ctx.mode === "propose_only");
@@ -443,7 +443,11 @@ export async function buildGateContext(
     "SELECT tier, COUNT(DISTINCT action || params_json) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND created_at>=? AND NOT (state='rejected' AND approved_by IS NULL) AND action!='collect_evidence' GROUP BY tier",
   ).bind(args.hostId, since).all<{ tier: number; n: number }>();
   const t0 = counts.results.find((c) => c.tier === 0)?.n ?? 0;
-  const t1 = counts.results.find((c) => c.tier === 1)?.n ?? 0;
+  // Tier 1 bounds the human's queue, not containment: count proposals still waiting plus ones a human rejected
+  // in the last hour (so a rejected action can't be re-asked in a loop). Approved/executed ones don't count.
+  const t1 = (await env.DB.prepare(
+    "SELECT COUNT(DISTINCT action || params_json) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND tier=1 AND (state='proposed' OR (state='rejected' AND approved_by IS NOT NULL AND updated_at>=?))",
+  ).bind(args.hostId, since).first<{ n: number }>())?.n ?? 0;
   const open = await env.DB.prepare(
     // A dispatched command past its expiry will never report back (the agent rejects it); it must not block re-requests.
     "SELECT action, params_json FROM actions WHERE host_id=? AND (state IN ('proposed','approved') OR (state='dispatched' AND (expires_at>? OR (expires_at IS NULL AND created_at>=?))))",

@@ -50,7 +50,7 @@ Run the checks for every package you touch before you say it's done.
 - **AI reviews are keyed per workflow run** (`analyzeStep(..., runId)`). A new run for new anomalies must triage afresh, not reuse an old run's review.
 - **Correlation never merges into an incident judged benign** (`server/src/queue.ts`).
 - **The agent ignores its own changes.** Quarantine/restore announce `path + sha256` to the engine (`ExpectChange`). The proc collector skips its own PID. Match on content hash so an attacker re-creating a path with different content is still detected.
-- **Rate limits** count only proposals that passed the gate, count each distinct proposal once, and leave out read-only `collect_evidence`. The open-action dedupe ignores dispatched commands past their `expires_at`.
+- **Rate limits:** tier 1 counts the approval queue (pending, plus human-rejected in the last hour), never approved containment. Tier 0 counts only proposals that passed the gate, count each distinct proposal once, and leave out read-only `collect_evidence`. The open-action dedupe ignores dispatched commands past their `expires_at`.
 - **Use generated binding types** (`npx wrangler types`), not a hand-written `Env`. In platform classes use `this.env`.
 
 ## Testing expectations
