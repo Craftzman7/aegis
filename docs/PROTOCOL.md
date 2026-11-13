@@ -110,7 +110,7 @@ Agent commands (sent as signed `Command`):
 
 ## 6. Live feed (FleetDO → dashboard)
 `GET /console/live` WebSocket. Messages: `{type, data, ts}` where
-`type ∈ "anomaly"|"incident"|"ai_review"|"action"|"host"|"audit"|"policy"`, `data` = the D1 row (JSON columns parsed).
+`type ∈ "anomaly"|"incident"|"ai_review"|"action"|"host"|"audit"|"policy"|"agent_turn"`, `data` = the D1 row (JSON columns parsed; for `agent_turn`, `content_json` is parsed into `content`).
 
 ## 7. Console API (dashboard; Cloudflare Access JWT, or `DEV_MODE=true` → user `dev@local`)
 All under `/console/api`. Rows returned with `*_json` columns parsed into objects (key minus `_json`).
@@ -118,7 +118,7 @@ All under `/console/api`. Rows returned with `*_json` columns parsed into object
 - `GET /overview` → `{hosts:{total,online,offline,isolated}, incidents_by_severity, pending_approvals, anomalies_24h_hourly:[{hour,count}], ai_actions_24h, autonomy}`
 - `GET /hosts`, `GET /hosts/:id` → `{host, anomalies, incidents, actions, policy}`
 - `POST /hosts/:id/autonomy` `{mode}`; `GET|POST /settings/autonomy` global `{mode: "autonomous"|"propose_only"|"paused"}`
-- `GET /incidents?status=&severity=&host=`, `GET /incidents/:id` → `{incident, anomalies, reviews, actions, audit}`
+- `GET /incidents?status=&severity=&host=`, `GET /incidents/:id` → `{incident, anomalies, reviews, actions, audit, turns: AgentTurn[]}` (turns ordered by `run_id`, `seq`)
 - `POST /incidents/:id/verdict` `{verdict:"true_positive"|"false_positive", note}`
 - `POST /incidents/:id/ask` `{question}` → `{answer}` (read-only)
 - `GET /approvals` → pending tier-1 actions (with incident + host)
@@ -131,3 +131,29 @@ All under `/console/api`. Rows returned with `*_json` columns parsed into object
 - `POST /enroll-tokens` `{ttl_hours}` → `{token, expires_at}` (shown once)
 - `GET /export/incidents/:id.ocsf.json`, `GET /export/iocs.stix.json`, `POST /iocs/import` (STIX bundle or CSV `type,value`)
 - `GET /evidence?key=` → R2 object JSON
+
+## 8. Agentic investigation (agent loop)
+
+Incident `status` also takes the value `"resolved"`: containment succeeded **and** the AI verified it with tools. It is not closed. A human confirms it with the existing `POST /incidents/:id/verdict {verdict: "true_positive"}`, which closes it as `closed_tp`. The AI never sets `closed_tp` itself.
+
+Action rows gain `critic_json` (parsed into `critic`), set on tier-1 proposals that went through the second-opinion review:
+```ts
+interface CriticNotes { decision: "submit" | "revise"; concerns: string[]; missing_checks: string[]; round: number }
+```
+
+The investigator's transcript, one row per message:
+```ts
+interface AgentTurn {
+  id: string; incident_id: string; run_id: string; seq: number; ts: string;
+  role: "user" | "assistant" | "tool";
+  tool_name: string | null;            // for role=tool: the tool that produced this result
+  tool_call_id: string | null;
+  content: {
+    text?: string;                                                      // assistant prose / user message
+    tool_calls?: { id: string; name: string; arguments: Record<string, unknown> }[];  // assistant
+    result?: unknown;                                                   // tool result (already untrusted-wrapped server-side when sent to the model)
+    error?: string;                                                     // tool error (bad args, gate rejection)
+    action_id?: string;                                                 // tool calls that created an actions row
+  };
+}
+```
