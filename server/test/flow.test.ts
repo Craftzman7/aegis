@@ -65,6 +65,15 @@ describe("queue consumer", () => {
     await handleTriageMessage(e, { anomaly_id: a2.id as string });
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM incidents").first<{ n: number }>())!.n).toBe(1);
   });
+  it("does not fold new anomalies into an incident already judged benign", async () => {
+    const { env: e, host, inc } = await setup(() => out({}));
+    await env.DB.prepare("UPDATE incidents SET verdict='benign' WHERE id=?").bind(inc.id).run();
+    const a2 = mkAnomaly({ rule_id: "native:cron", rule_title: "Cron modified" });
+    await host.req(e, "POST", "/v1/events", { anomalies: [a2] });
+    await handleTriageMessage(e, { anomaly_id: a2.id as string });
+    const row = (await env.DB.prepare("SELECT incident_id FROM anomalies WHERE id=?").bind(a2.id).first<{ incident_id: string }>())!;
+    expect(row.incident_id).not.toBe(inc.id);
+  });
   it("outside the 30 min window a new incident is created", async () => {
     const { env: e, host, inc } = await setup(() => out({}));
     await env.DB.prepare("UPDATE incidents SET updated_at=? WHERE id=?").bind(new Date(Date.now() - 31 * 60_000).toISOString(), inc.id).run();
@@ -178,6 +187,15 @@ describe("investigation workflow (mock AI, in-process steps)", () => {
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM ai_reviews").first<{ n: number }>())!.n).toBe(1);
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM actions").first<{ n: number }>())!.n).toBe(1);
     expect(m0.cap.aiCalls.filter((c) => !c.model.includes("bge"))).toHaveLength(1);
+  });
+
+  it("a new workflow run analyzes afresh instead of reusing an earlier run's review", async () => {
+    const m0 = await setup(() => out({}));
+    const { analyzeStep } = await import("../src/workflows/investigation");
+    const r1 = await analyzeStep(m0.env, m0.inc.id, "triage", 0, "run-1");
+    const r2 = await analyzeStep(m0.env, m0.inc.id, "triage", 0, "run-2");
+    expect(r2.review_id).not.toBe(r1.review_id);
+    expect(m0.cap.aiCalls.filter((c) => !c.model.includes("bge"))).toHaveLength(2);
   });
 
   it("repairs invalid model output once, then fails cleanly and marks the incident open", async () => {

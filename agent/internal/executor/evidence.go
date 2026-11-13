@@ -254,6 +254,7 @@ func (e *Executor) evLogExcerpt(ctx context.Context, target string) (map[string]
 		}
 		return map[string]any{"source": target, "lines": lastLines(out, maxLogLines)}, nil
 	}
+	target = strings.TrimPrefix(target, e.cfg.LogDir+"/") // accept "/var/log/auth.log" as well as "auth.log"
 	if !logFileNames[target] {
 		return nil, reject("log target must be one of the allowlisted log names or journal[:unit]")
 	}

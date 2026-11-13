@@ -129,6 +129,9 @@ type Proc struct {
 	Interval time.Duration
 	// UserName resolves a uid to a name; optional.
 	UserName func(uid int) string
+	// SelfPID is never flagged (an in-place upgrade leaves the agent on a
+	// deleted inode). Defaults to os.Getpid().
+	SelfPID int
 }
 
 func (p *Proc) Name() string { return "proc" }
@@ -164,6 +167,10 @@ func (p *Proc) Run(ctx context.Context, out chan<- event.Event) error {
 	if iv == 0 {
 		iv = 5 * time.Second
 	}
+	self := p.SelfPID
+	if self == 0 {
+		self = os.Getpid()
+	}
 	seen := map[procKey]bool{}
 	flagged := map[procKey]bool{}
 	first := true
@@ -194,7 +201,7 @@ func (p *Proc) Run(ctx context.Context, out chan<- event.Event) error {
 					}
 				}
 			}
-			if !flagged[k] {
+			if !flagged[k] && pid != self {
 				for _, kind := range Classify(pi) {
 					flagged[k] = true
 					if !emit(ctx, out, ToEvent(pi, parent, kind, user)) {

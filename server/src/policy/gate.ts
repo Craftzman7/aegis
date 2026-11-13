@@ -230,7 +230,8 @@ function normalize(action: string, raw: unknown, ctx: GateContext): Norm {
       const lvl = fp.rule_level;
       if (lvl === "high" || lvl === "critical") return { ok: false, reason: `suppression not allowed for ${lvl} rules` };
       if (fp.rule_id.startsWith("ioc:")) return { ok: false, reason: "IOC detections cannot be suppressed" };
-      return { ok: true, params: r.data, tier: 0 };
+      // Anything that reduces detection needs a human: an attacker can plant "please suppress this" in evidence.
+      return { ok: true, params: r.data, tier: 1 };
     }
     case "propose_rule": {
       const r = z.object({ title: z.string().trim().min(1).max(200), yaml: z.string().min(10).max(LIMITS.maxRuleYaml) }).strict().safeParse(p);
@@ -253,7 +254,7 @@ function normalize(action: string, raw: unknown, ctx: GateContext): Norm {
       const rule = ctx.rules[r.data.rule_id];
       if (!rule) return { ok: false, reason: "unknown rule" };
       if (rule.status === "disabled") return { ok: false, reason: "rule already disabled" };
-      return { ok: true, params: r.data, tier: rule.level === "high" || rule.level === "critical" ? 1 : 0 };
+      return { ok: true, params: r.data, tier: 1 }; // reduces detection: always human-approved (see suppress)
     }
     case "collect_evidence": {
       const r = z

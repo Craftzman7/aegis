@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -294,5 +295,25 @@ func TestFromAuditEvent(t *testing.T) {
 	}
 	if _, ok := FromAuditEvent(&aucoalesce.Event{Data: map[string]string{"syscall": "open"}}); ok {
 		t.Fatal("open must be ignored")
+	}
+}
+
+func TestProcNeverFlagsItself(t *testing.T) {
+	root := t.TempDir()
+	writeProc(t, root, 6, 1, "aegis-agent", "/usr/local/bin/aegis-agent (deleted)", "aegis-agent run", false)
+	writeProc(t, root, 7, 1, "ghost", "/usr/bin/ghost (deleted)", "ghost", false)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	out := make(chan event.Event, 16)
+	(&Proc{ProcRoot: root, Interval: 10 * time.Millisecond, SelfPID: 6}).Run(ctx, out)
+	close(out)
+	var flagged []int
+	for ev := range out {
+		if ev.Kind == event.KindProcDeletedExe {
+			flagged = append(flagged, ev.ProcessId)
+		}
+	}
+	if len(flagged) != 1 || flagged[0] != 7 {
+		t.Fatalf("want only pid 7 flagged, got %v", flagged)
 	}
 }

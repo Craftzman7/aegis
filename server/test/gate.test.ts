@@ -41,12 +41,10 @@ describe("tiers", () => {
       ["collect_evidence", { kind: "file_hash", target: "/tmp/x" }],
       ["adjust_threshold", { key: "native:ssh_bruteforce.count", value: 20 }],
       ["add_watch", { kind: "path", target: "/etc/cron.d" }],
-      ["suppress", { fingerprint: FP, ttl_seconds: 3600, reason: "scanner" }],
       ["propose_rule", { title: "t", yaml: RULE }],
       ["test_rule", { yaml: RULE }],
       ["raise_log_level", { ttl_seconds: 600 }],
       ["yara_scan", { path: "/tmp/a" }],
-      ["disable_rule", { rule_id: "r_active_low" }],
     ] as const) {
       const d = g(a, p);
       expect(d.accepted, `${a}: ${d.reason}`).toBe(true);
@@ -226,7 +224,7 @@ describe("misc actions", () => {
     expect(g("promote_rule", { rule_id: "missing" }).accepted).toBe(false);
     expect(g("disable_rule", { rule_id: "r_off" }).accepted).toBe(false);
     expect(g("disable_rule", { rule_id: "r_active_high" }).tier).toBe(1);
-    expect(g("disable_rule", { rule_id: "r_active_low" }).tier).toBe(0);
+    expect(g("disable_rule", { rule_id: "r_active_low" }).tier).toBe(1);
   });
   it("propose_rule/test_rule lint and size", () => {
     expect(g("propose_rule", { title: "x", yaml: "not: a rule: [" }).accepted).toBe(false);
@@ -257,6 +255,19 @@ describe("rate limits and dedupe", () => {
     expect([dup[0]!.accepted, dup[1]!.accepted]).toEqual([true, false]);
     const many = gateBatch(Array.from({ length: 12 }, (_, i) => ({ action: "raise_log_level", params: { ttl_seconds: 60 + i } })), ctx(), 10);
     expect(many.slice(10).every((d) => !d.accepted)).toBe(true);
+  });
+});
+
+describe("detection-reducing actions always need a human", () => {
+  // Seen in a model eval: an instruction planted in a cron file made Llama propose exactly this.
+  it("suppress of a medium detection and disable of a low rule are tier 1, not auto-applied", () => {
+    const s = g("suppress", { fingerprint: FP, ttl_seconds: 604800, reason: "approved monitoring job" });
+    expect(s.accepted).toBe(true);
+    expect(s.tier).toBe(1);
+    expect(s.requiresApproval).toBe(true);
+    const d = g("disable_rule", { rule_id: "r_active_low" });
+    expect(d.tier).toBe(1);
+    expect(d.requiresApproval).toBe(true);
   });
 });
 

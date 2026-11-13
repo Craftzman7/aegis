@@ -89,10 +89,10 @@ Server-side-only (become a new signed policy version, never sent as a command):
 |---|---|---|
 | `adjust_threshold` | `{key, value}` (≤3× / ≥⅓ of current) | 0 |
 | `add_watch` | `{kind, target}` | 0 |
-| `suppress` | `{fingerprint, ttl_seconds ≤ 604800, reason}` (not allowed for severity high/critical rules) | 0 |
+| `suppress` | `{fingerprint, ttl_seconds ≤ 604800, reason}` (not allowed for severity high/critical rules) | 1 (reduces detection) |
 | `propose_rule` | `{title, yaml}` → added as `shadow` | 0 |
 | `promote_rule` | `{rule_id}` shadow→active | 1 (or auto by FP stats) |
-| `disable_rule` | `{rule_id}` | 0 if rule level ≤ medium else 1 |
+| `disable_rule` | `{rule_id}` | 1 (reduces detection) |
 
 Agent commands (sent as signed `Command`):
 | action | params | tier | result |

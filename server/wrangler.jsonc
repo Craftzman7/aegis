@@ -52,7 +52,7 @@
   "triggers": { "crons": ["0 * * * *", "0 6 * * *"] },
   "secrets": { "required": ["SIGNING_KEY_JWK"] },
   "vars": {
-    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "AI_GATEWAY_ID": "aegis",
     "DEV_MODE": "false",
     "ACCESS_TEAM_DOMAIN": "aegis-soc.cloudflareaccess.com",

@@ -14,7 +14,8 @@ export interface TriageMessage {
 export async function correlateAnomaly(env: Env, anomaly: AnomalyRow): Promise<{ incident: IncidentRow; created: boolean }> {
   const since = new Date(Date.now() - CORRELATION_WINDOW_MS).toISOString();
   const existing = await env.DB.prepare(
-    "SELECT * FROM incidents WHERE host_id=? AND status IN ('open','investigating','awaiting_approval') AND updated_at>=? ORDER BY updated_at DESC LIMIT 1",
+    // Never fold new activity into an incident already judged benign: it would be read in that light (or not re-triaged).
+    "SELECT * FROM incidents WHERE host_id=? AND status IN ('open','investigating','awaiting_approval') AND coalesce(verdict,'') NOT IN ('benign','false_positive') AND updated_at>=? ORDER BY updated_at DESC LIMIT 1",
   ).bind(anomaly.host_id, since).first<IncidentRow>();
   const now = nowIso();
   const tags = safeJson<string[]>(anomaly.attack_tags_json, []);

@@ -399,6 +399,8 @@ func TestCollectEvidence(t *testing.T) {
 	if lines := res.Result["data"].(map[string]any)["lines"].([]string); len(lines) != 3 {
 		t.Fatalf("%v", lines)
 	}
+	e.want(e.do("collect_evidence", map[string]any{"kind": "log_excerpt", "target": filepath.Join(e.dir, "log", "auth.log")}), StatusSucceeded)
+	e.want(e.do("collect_evidence", map[string]any{"kind": "log_excerpt", "target": filepath.Join(e.dir, "log", "../../etc/shadow")}), StatusRejected)
 	res = e.do("collect_evidence", map[string]any{"kind": "user_info", "target": "alice"})
 	e.want(res, StatusSucceeded)
 	ui := res.Result["data"].(map[string]any)

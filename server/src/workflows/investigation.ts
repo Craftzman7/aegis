@@ -45,11 +45,12 @@ export async function startStep(env: Env, incidentId: string): Promise<{ closed:
   return { closed: false };
 }
 
-export async function analyzeStep(env: Env, incidentId: string, step: "triage" | "reanalyze" | "final", round: number): Promise<ReviewRef> {
+export async function analyzeStep(env: Env, incidentId: string, step: "triage" | "reanalyze" | "final", round: number, runId = ""): Promise<ReviewRef> {
   const inc = await getIncident(env, incidentId);
   const empty: ReviewRef = { skipped: true, review_id: "", verdict: "", severity: "", confidence: 0 };
   if (!inc || isClosed(inc.status)) return empty;
-  const reviewId = await deterministicUuid(`review:${incidentId}:${step}:${round}`);
+  // Keyed per workflow run: a run started for new anomalies must analyze afresh, not reuse an old run's triage.
+  const reviewId = await deterministicUuid(`review:${incidentId}:${runId}:${step}:${round}`);
   const existing = await env.DB.prepare("SELECT output_json FROM ai_reviews WHERE id=?").bind(reviewId).first<{ output_json: string }>();
   if (existing) {
     const o = safeJson<AnalystOutput>(existing.output_json, null as unknown as AnalystOutput);
@@ -249,7 +250,7 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
     try {
       for (;;) {
         const tag = `r${round}`;
-        const review = await step.do(`${stepName}:${tag}`, AI_STEP_CFG, () => analyzeStep(this.env, id, stepName, round));
+        const review = await step.do(`${stepName}:${tag}`, AI_STEP_CFG, () => analyzeStep(this.env, id, stepName, round, event.instanceId));
         if (review.skipped) return { status: "skipped", rounds: round };
         last = review;
         const g = await step.do(`gate:${tag}`, DB_STEP_CFG, () => gateStep(this.env, id, review.review_id, false));
@@ -261,7 +262,7 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
         round++;
         stepName = "reanalyze";
       }
-      const fin = await step.do("final", AI_STEP_CFG, () => analyzeStep(this.env, id, "final", round + 1));
+      const fin = await step.do("final", AI_STEP_CFG, () => analyzeStep(this.env, id, "final", round + 1, event.instanceId));
       if (!fin.skipped) {
         await step.do("final-gate", DB_STEP_CFG, () => gateStep(this.env, id, fin.review_id, true));
         last = fin;
