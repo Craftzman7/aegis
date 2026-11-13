@@ -25,6 +25,9 @@ export const APPROVAL_TIMEOUT = "24 hours";
 // Loop budgets (AGENT_MODE=loop). Wall time excludes approval waits.
 export const MAX_TOOL_CALLS = 30;
 export const MAX_TURNS = 20;
+/** Fresh allowance after approvals come back, so a long evidence sweep can never leave containment unverified. */
+export const VERIFY_TOOL_CALLS = 10;
+export const VERIFY_TURNS = 5;
 export const LOOP_WALL_MS = 20 * 60 * 1000;
 export const EVIDENCE_WAIT = "60 seconds";
 export const MAX_EVIDENCE_WAITS = 15;
@@ -360,12 +363,14 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
       let lastNow = init.startedAt;
       let approvalWait = 0;
       let toolCalls = 0;
+      let maxCalls = MAX_TOOL_CALLS;
+      let maxTurns = MAX_TURNS;
       let noTool = 0;
       let forced = false;
       let forcedTurns = 0;
       let finished = false;
       for (; !finished; n++) {
-        const budget = forced || toolCalls >= MAX_TOOL_CALLS || n >= MAX_TURNS || lastNow - init.startedAt - approvalWait > LOOP_WALL_MS;
+        const budget = forced || toolCalls >= maxCalls || n >= maxTurns || lastNow - init.startedAt - approvalWait > LOOP_WALL_MS;
         const force = budget || noTool >= 2;
         const inject = budget && !forced ? ("budget" as const) : noTool === 1 && !force ? ("nudge" as const) : null;
         if (force) {
@@ -383,7 +388,7 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
         noTool = 0;
         for (let i = 0; i < t.calls.length && !finished; i++) {
           const call = t.calls[i]!;
-          const over = toolCalls >= MAX_TOOL_CALLS;
+          const over = toolCalls >= maxCalls;
           if (call.name !== "finish") toolCalls++;
           const r = await step.do(`tool:${n}:${i}`, DB_STEP_CFG, () => toolStep(this.env, id, runId, n, i, call, over));
           if (r.wait) {
@@ -396,6 +401,8 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
               const t1 = await step.do(`appr-end:${tag}`, DB_STEP_CFG, async () => Date.now());
               approvalWait += t1 - t0;
               lastNow = t1;
+              maxCalls = Math.max(maxCalls, toolCalls + VERIFY_TOOL_CALLS);
+              maxTurns = Math.max(maxTurns, n + 1 + VERIFY_TURNS);
               const ids = await step.do(`appr-dispatched:${tag}`, DB_STEP_CFG, () => pendingApprovedIds(this.env, id));
               for (const aid of ids) await this.waitForAction(step, `${tag}:${aid.slice(0, 8)}`, aid);
             }

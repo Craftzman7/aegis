@@ -192,6 +192,24 @@ describe("finalize statuses", () => {
   });
 });
 
+describe("verification allowance", () => {
+  it("an approval late in the call budget still leaves room to verify and resolve", async () => {
+    const path = "/etc/cron.d/evil";
+    const sweep = (k: number) => ({ choices: [{ message: { content: null, tool_calls: Array.from({ length: 7 }, (_, j) => ({ id: `s${k}_${j}`, type: "function", function: { name: "host_timeline", arguments: "{}" } })) } }] });
+    const m = await setup(
+      [
+        sweep(0), sweep(1), sweep(2), sweep(3), // 28 calls of evidence before proposing (as seen in prod)
+        tc("propose_action", { action: "quarantine_file", params: { path }, reason: "malicious cron persistence" }, "p"), // 29
+        tc("wait_for_approvals", {}, "w"), // 30: budget used up here without the allowance
+        tc("collect_evidence", { kind: "file_hash", target: path }, "v"),
+        tc("finish", { ...FIN, verified: true, verification: "file_hash after quarantine returned no file" }, "f"),
+      ],
+      [{ decision: "submit", missing_checks: [], concerns: [] }],
+    );
+    expect((await runWf(m, autoStep(m))).status).toBe("resolved");
+  });
+});
+
 describe("flow: evidence -> propose -> critic -> human approval -> verify -> resolved", () => {
   it("scripted agent resolves the incident", async () => {
     const path = "/etc/cron.d/evil";
