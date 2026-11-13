@@ -47,6 +47,7 @@ Q "SELECT ts,rule_id,summary FROM anomalies WHERE incident_id='$I' ORDER BY ts"
 Q "SELECT step,round,ts,model,output_json FROM ai_reviews WHERE incident_id='$I' ORDER BY ts"
 Q "SELECT action,tier,state,params_json,reject_reason,error FROM actions WHERE incident_id='$I' ORDER BY created_at"
 Q "SELECT ts,actor,event,detail_json FROM audit_log WHERE incident_id='$I' ORDER BY id"
+Q "SELECT seq,role,tool_name,substr(content_json,1,300) FROM agent_turns WHERE incident_id='$I' ORDER BY run_id,seq"   # agent loop transcript
 ```
 
 The `audit_log` table is the ground truth for who did what and when.
@@ -65,6 +66,13 @@ The `audit_log` table is the ground truth for who did what and when.
 **Fixing state by hand:** if you edit rows in D1 (for example, to repair an overwritten action), match the audit log, and keep `result_json` intact.
 
 Mark false positives in the dashboard rather than in SQL. Verdicts update rule stats and the AI's memory. Write a note saying *why* it was a false positive; the note is stored with the label and shown to the AI on similar incidents.
+
+## Agent loop
+
+- **Modes:** `AGENT_MODE=loop` (the default) runs the tool-calling investigation. To roll back, set `AGENT_MODE=rounds` in `server/wrangler.jsonc` and redeploy.
+- **Budgets:** 30 tool calls, 20 turns and 20 minutes. Waiting for your approval doesn't count toward the time limit. When approvals come back, the agent gets another 10 calls and 5 turns to verify the containment.
+- **`resolved`:** containment is verified and the incident waits for your **Confirm true positive**.
+- **Second-opinion review:** notes appear on the approval card and in `actions.critic_json`. "review unavailable" means the review call failed and the proposal went through without it.
 
 ## Changing the model
 

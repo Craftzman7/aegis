@@ -53,6 +53,16 @@ Run the checks for every package you touch before you say it's done.
 - **Rate limits:** tier 1 counts the approval queue (pending, plus human-rejected in the last hour), never approved containment. Tier 0 counts only proposals that passed the gate, count each distinct proposal once, and leave out read-only `collect_evidence`. The open-action dedupe ignores dispatched commands past their `expires_at`.
 - **Use generated binding types** (`npx wrangler types`), not a hand-written `Env`. In platform classes use `this.env`.
 
+## Agent loop invariants
+
+- `AGENT_MODE=loop` (in `server/src/workflows/investigation.ts` and `server/src/ai/tools.ts`) runs the tool-calling investigation. `rounds` is the rollback path.
+- Every host tool goes through `gate()` and `dispatchAction()`. Tier 1 goes only through `propose_action`, then the second-opinion review (`server/src/ai/critic.ts`), then a human.
+- Tool results go back to the model as untrusted data.
+- `finish` is refused while proposals are pending.
+- `resolved` needs `verified=true` **and** a successful `collect_evidence` after the last containment. The AI never sets `closed_tp`.
+- After approvals return, the agent gets an extra allowance for verification (`VERIFY_TOOL_CALLS`, `VERIFY_TURNS`).
+- The critic fails open, attaching "review unavailable" to the proposal. Keep its `maxTokens` large enough for reasoning models.
+
 ## Testing expectations
 
 - Every bug fix gets a test that fails without the fix.
