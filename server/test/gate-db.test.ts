@@ -18,4 +18,22 @@ describe("buildGateContext tier-1 rate count", () => {
     const ctx = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
     expect(ctx.tier1LastHour).toBe(2);
   });
+
+  it("ignores dispatched commands past their lifetime and does not count evidence collection", async () => {
+    const { env } = mkEnv();
+    const h = await enrollHost(env);
+    const ev = (created: string) =>
+      createAction(env, { id: crypto.randomUUID(), incident_id: null, host_id: h.id, action: "collect_evidence", params: { kind: "netconns" }, tier: 0, kind: "command", state: "approved", proposed_by: "ai" })
+        .then((a) => env.DB.prepare("UPDATE actions SET state='dispatched', created_at=? WHERE id=?").bind(created, a.id).run());
+    await ev(new Date(Date.now() - 2 * 3600_000).toISOString()); // stuck since before the dispatch-race fix
+    const ctx = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
+    expect(ctx.openKeys.size).toBe(0);
+    await ev(new Date().toISOString());
+    const ctx2 = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
+    expect(ctx2.openKeys.size).toBe(1);
+    expect(ctx2.tier0LastHour).toBe(0);
+    await env.DB.prepare("UPDATE actions SET expires_at=? WHERE state='dispatched'").bind(new Date(Date.now() - 1000).toISOString()).run(); // command expired
+    const ctx3 = await buildGateContext(env, { hostId: h.id, source: "ai", mode: "autonomous", thresholds: {}, serverEndpoints: [], requests: [] });
+    expect(ctx3.openKeys.size).toBe(0);
+  });
 });

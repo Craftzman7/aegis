@@ -258,6 +258,23 @@ describe("rate limits and dedupe", () => {
   });
 });
 
+describe("evidence collection and the tier-0 budget", () => {
+  it("collect_evidence is allowed at the tier-0 limit; other tier-0 actions are not", () => {
+    const c = ctx({ tier0LastHour: LIMITS.tier0PerHostPerHour });
+    expect(g("collect_evidence", { kind: "netconns" }, c).accepted).toBe(true);
+    expect(g("add_watch", { kind: "path", target: "/etc/cron.d" }, c).accepted).toBe(false);
+  });
+  it("evidence requests in a batch don't use up the budget for later actions", () => {
+    const c = ctx({ tier0LastHour: LIMITS.tier0PerHostPerHour - 1 });
+    const d = gateBatch([
+      { action: "collect_evidence", params: { kind: "netconns" }, reason: "r" },
+      { action: "collect_evidence", params: { kind: "process_tree", target: "1234" }, reason: "r" },
+      { action: "add_watch", params: { kind: "path", target: "/etc/cron.d" }, reason: "r" },
+    ], c);
+    expect(d.map((x) => x.accepted)).toEqual([true, true, true]);
+  });
+});
+
 describe("detection-reducing actions always need a human", () => {
   // Seen in a model eval: an instruction planted in a cron file made Llama propose exactly this.
   it("suppress of a medium detection and disable of a low rule are tier 1, not auto-applied", () => {

@@ -104,6 +104,7 @@ export async function dispatchAction(env: Env, action: ActionRow, actor: string,
   const envelope = await signEnvelope(env.SIGNING_KEY_JWK, cmd);
   // Mark dispatched BEFORE pushing: the agent can answer over /v1/results within ms, and writing
   // "dispatched" afterwards would overwrite its succeeded/failed state.
+  await env.DB.prepare("UPDATE actions SET expires_at=? WHERE id=?").bind(cmd.expires_at, action.id).run();
   await setActionState(env, action.id, "dispatched");
   try {
     const { delivered } = await hostStub(env, action.host_id).pushCommand(cmd.id, envelope, now + ttl * 1000);

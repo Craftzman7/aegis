@@ -366,7 +366,8 @@ export function gate(req: GateRequest, ctx: GateContext): GateDecision {
   if (ctx.openKeys.has(key)) return { ...rejected(req, "duplicate of an open action", n.tier), normalizedParams: n.params };
 
   if (ctx.source === "ai") {
-    if (n.tier === 0 && ctx.tier0LastHour >= LIMITS.tier0PerHostPerHour)
+    // collect_evidence is read-only and bounded per review (maxRequests) and per run (rounds); it doesn't spend the budget.
+    if (n.tier === 0 && req.action !== "collect_evidence" && ctx.tier0LastHour >= LIMITS.tier0PerHostPerHour)
       return { ...rejected(req, `rate limit: ${LIMITS.tier0PerHostPerHour} tier-0 actions per host per hour`, 0), normalizedParams: n.params };
     if (n.tier === 1 && ctx.tier1LastHour >= LIMITS.tier1PerHostPerHour)
       return { ...rejected(req, `rate limit: ${LIMITS.tier1PerHostPerHour} tier-1 proposals per host per hour`, 1), normalizedParams: n.params };
@@ -397,8 +398,8 @@ export function gateBatch(reqs: GateRequest[], ctx: GateContext, maxRequests = 1
     }
     const d = gate(r, { ...ctx, tier0LastHour: t0, tier1LastHour: t1, openKeys: keys });
     if (d.accepted) {
-      if (d.tier === 0) t0++;
-      else t1++;
+      if (d.tier === 1) t1++;
+      else if (d.action !== "collect_evidence") t0++;
       keys.add(`${d.action}:${stableStringify(d.normalizedParams)}`);
     }
     out.push(d);
@@ -439,13 +440,14 @@ export async function buildGateContext(
   const counts = await env.DB.prepare(
     // Gate rejections (rejected, never seen by a human) don't count, or hitting the limit would keep it hit;
     // re-proposing the same action+params counts once.
-    "SELECT tier, COUNT(DISTINCT action || params_json) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND created_at>=? AND NOT (state='rejected' AND approved_by IS NULL) GROUP BY tier",
+    "SELECT tier, COUNT(DISTINCT action || params_json) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND created_at>=? AND NOT (state='rejected' AND approved_by IS NULL) AND action!='collect_evidence' GROUP BY tier",
   ).bind(args.hostId, since).all<{ tier: number; n: number }>();
   const t0 = counts.results.find((c) => c.tier === 0)?.n ?? 0;
   const t1 = counts.results.find((c) => c.tier === 1)?.n ?? 0;
   const open = await env.DB.prepare(
-    "SELECT action, params_json FROM actions WHERE host_id=? AND state IN ('proposed','approved','dispatched')",
-  ).bind(args.hostId).all<{ action: string; params_json: string }>();
+    // A dispatched command past its expiry will never report back (the agent rejects it); it must not block re-requests.
+    "SELECT action, params_json FROM actions WHERE host_id=? AND (state IN ('proposed','approved') OR (state='dispatched' AND (expires_at>? OR (expires_at IS NULL AND created_at>=?))))",
+  ).bind(args.hostId, new Date().toISOString(), since).all<{ action: string; params_json: string }>();
   const openKeys = new Set<string>();
   for (const o of open.results) {
     try {

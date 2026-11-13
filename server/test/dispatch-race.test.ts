@@ -14,6 +14,8 @@ describe("dispatchAction", () => {
     const a = await createAction(env, { id: crypto.randomUUID(), incident_id: null, host_id: h.id, action: "collect_evidence", params: { kind: "netconns" }, tier: 0, kind: "command", state: "approved", proposed_by: "ai" });
     const out = await dispatchAction(env, a, "ai");
     expect(out.state).toBe("succeeded");
-    expect((await getAction(env, a.id))?.state).toBe("succeeded");
+    const row = await getAction(env, a.id);
+    expect(row?.state).toBe("succeeded");
+    expect(row?.expires_at).toBeTruthy(); // stored so stale dispatches stop blocking duplicates
   });
 });
