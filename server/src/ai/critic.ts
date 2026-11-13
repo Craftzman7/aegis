@@ -51,7 +51,7 @@ export async function critique(env: Env, input: CritiqueInput, round: number): P
   lines.push("\nRespond with the JSON object only.");
   const messages: ChatMessage[] = [{ role: "system", content: CRITIC_SYSTEM_PROMPT }, { role: "user", content: lines.join("\n") }];
   try {
-    const raw = extractModelOutput(await runChat(env, messages, { jsonSchema: CRITIC_JSON_SCHEMA, maxTokens: 1200 }));
+    const raw = extractModelOutput(await runChat(env, messages, { jsonSchema: CRITIC_JSON_SCHEMA, maxTokens: 4000 } // reasoning models spend ~1k tokens thinking; 1200 truncated the JSON));
     const obj = typeof raw === "string" ? JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")) : raw;
     const r = CriticSchema.parse(obj);
     return { decision: r.decision, concerns: r.concerns, missing_checks: r.missing_checks, round };
