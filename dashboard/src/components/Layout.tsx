@@ -1,28 +1,15 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { useApprovals, useGlobalAutonomy, useMe } from "../api/hooks";
+import { useApprovals, useMe } from "../api/hooks";
 import { useLive } from "../live/LiveProvider";
-import { StateBadge } from "./badges";
 
 const NAV = [
   { to: "/", label: "Overview", end: true }, { to: "/incidents", label: "Incidents" }, { to: "/approvals", label: "Approvals" },
   { to: "/hosts", label: "Hosts" }, { to: "/rules", label: "Rules" }, { to: "/audit", label: "Audit" }, { to: "/settings", label: "Settings" },
 ];
 
-function ConnectionIndicator() {
-  const { status } = useLive();
-  const map = { open: ["var(--ok)", "Live"], connecting: ["var(--sev-medium)", "Connecting"], closed: ["var(--sev-high)", "Polling (15s)"] } as const;
-  const [color, text] = map[status];
-  return (
-    <span className="flex items-center gap-1.5 text-xs text-muted" role="status" aria-label={`Live connection: ${text}`} title={status === "closed" ? "WebSocket disconnected; falling back to 15s polling" : undefined}>
-      <span className="h-2 w-2 rounded-full" style={{ background: color }} />{text}
-    </span>
-  );
-}
-
 export function Layout() {
   const approvals = useApprovals();
   const me = useMe();
-  const autonomy = useGlobalAutonomy();
   const pending = approvals.data?.length ?? 0;
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -43,8 +30,6 @@ export function Layout() {
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 items-center justify-end gap-5 border-b border-line px-6">
-          {autonomy.data && <Link to="/settings" className="flex items-center gap-2 text-xs text-muted hover:text-fg">AI autonomy <StateBadge state={autonomy.data.mode} /></Link>}
-          <ConnectionIndicator />
           <span className="text-xs text-muted">{me.data?.email ?? "..."}</span>
         </header>
         <main id="main" className="min-w-0 flex-1 overflow-auto"><div className="mx-auto max-w-6xl px-6 py-6"><Outlet /></div></main>
