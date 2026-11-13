@@ -436,7 +436,9 @@ export async function buildGateContext(
   }
   const since = new Date(Date.now() - 3600_000).toISOString();
   const counts = await env.DB.prepare(
-    "SELECT tier, COUNT(*) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND created_at>=? GROUP BY tier",
+    // Gate rejections (rejected, never seen by a human) don't count, or hitting the limit would keep it hit;
+    // re-proposing the same action+params counts once.
+    "SELECT tier, COUNT(DISTINCT action || params_json) AS n FROM actions WHERE host_id=? AND proposed_by='ai' AND created_at>=? AND NOT (state='rejected' AND approved_by IS NULL) GROUP BY tier",
   ).bind(args.hostId, since).all<{ tier: number; n: number }>();
   const t0 = counts.results.find((c) => c.tier === 0)?.n ?? 0;
   const t1 = counts.results.find((c) => c.tier === 1)?.n ?? 0;

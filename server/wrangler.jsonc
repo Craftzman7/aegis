@@ -54,7 +54,7 @@
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "AI_GATEWAY_ID": "aegis",
     "DEV_MODE": "false",
-    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_TEAM_DOMAIN": "omensystems.cloudflareaccess.com",
     "ACCESS_AUD": ""
   }
 }
