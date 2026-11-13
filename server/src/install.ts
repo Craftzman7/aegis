@@ -30,7 +30,12 @@ else
   wget -qO "$BIN.new" "$SERVER/releases/agent/latest/aegis-agent-linux-$ARCH"
 fi
 chmod 0755 "$BIN.new"
-mv "$BIN.new" "$BIN"
+if ! mv "$BIN.new" "$BIN" 2>/dev/null; then
+  # e.g. the lab bind-mounts the binary read-only; keep the existing one if it runs
+  rm -f "$BIN.new"
+  "$BIN" version >/dev/null 2>&1 || { echo "cannot replace $BIN and no working agent is there" >&2; exit 1; }
+  echo "==> $BIN can't be replaced (read-only mount?); using the existing binary"
+fi
 
 mkdir -p /etc/aegis /var/lib/aegis
 chmod 0700 /var/lib/aegis
