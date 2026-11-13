@@ -27,14 +27,14 @@ export function IncidentDetail() {
       <PageHeader title={i.title}>
         <a className="btn" href={api.ocsfUrl(i.id)} download>Export OCSF</a>
       </PageHeader>
-      <div className="card mb-4 grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div><div className="text-[11px] uppercase text-muted">Host</div><HostLink id={i.host_id} name={host?.hostname} /></div>
-        <div><div className="text-[11px] uppercase text-muted">Severity</div><SeverityBadge severity={i.severity} /></div>
-        <div><div className="text-[11px] uppercase text-muted">Status</div><StateBadge state={i.status} /></div>
-        <div><div className="text-[11px] uppercase text-muted">Verdict</div><VerdictBadge verdict={i.verdict} /></div>
-        <div><div className="text-[11px] uppercase text-muted">Confidence</div><ConfidenceBar value={i.confidence} /></div>
-        <div><div className="text-[11px] uppercase text-muted">Opened</div><span className="mono">{fmtTime(i.created_at)}</span></div>
-        <div className="sm:col-span-2"><div className="text-[11px] uppercase text-muted">ATT&amp;CK</div><AttackTags tags={i.attack_tags} /></div>
+      <div className="-mt-3 mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-muted">
+        <SeverityBadge severity={i.severity} />
+        <StateBadge state={i.status} />
+        <VerdictBadge verdict={i.verdict} />
+        <span className="flex items-center gap-2">Confidence <ConfidenceBar value={i.confidence} /></span>
+        <span>on <HostLink id={i.host_id} name={host?.hostname} /></span>
+        <span>opened {fmtTime(i.created_at)}</span>
+        <AttackTags tags={i.attack_tags} />
       </div>
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">

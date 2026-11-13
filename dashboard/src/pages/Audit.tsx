@@ -35,7 +35,7 @@ export function Audit() {
                 <tr key={r.id}>
                   <td className="mono whitespace-nowrap">{fmtTime(r.ts)}</td><td className="mono">{r.actor}</td><td className="mono font-semibold">{r.event}</td>
                   <td>{r.incident_id ? <IncidentLink id={r.incident_id} /> : "-"}</td>
-                  <td className="min-w-48">{r.detail == null ? "-" : open === r.id ? <JsonView value={r.detail} /> : <button type="button" className="text-accent hover:underline" onClick={() => setOpen(r.id)}>View JSON</button>}</td>
+                  <td className="min-w-48">{r.detail == null ? "-" : open === r.id ? <JsonView value={r.detail} /> : <button type="button" className="text-muted underline-offset-2 hover:text-fg hover:underline" onClick={() => setOpen(r.id)}>View JSON</button>}</td>
                 </tr>
               ))}
             </tbody>

@@ -35,8 +35,8 @@ export function Incidents() {
               {q.data.map((i) => (
                 <tr key={i.id}>
                   <td><SeverityBadge severity={i.severity} /></td>
-                  <td><Link className="font-medium text-accent hover:underline" to={`/incidents/${i.id}`}>{i.title}</Link></td>
-                  <td className="mono">{i.hostname ?? name(i.host_id)}</td>
+                  <td><Link className="font-medium hover:underline" to={`/incidents/${i.id}`}>{i.title}</Link></td>
+                  <td className="whitespace-nowrap text-muted">{i.hostname ?? name(i.host_id)}</td>
                   <td><StateBadge state={i.status} /></td>
                   <td><VerdictBadge verdict={i.verdict} /></td>
                   <td><ConfidenceBar value={i.confidence} /></td>

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useCoverage, useCreateRule, useHosts, useRules, useSetRuleStatus } from "../api/hooks";
 import type { LintResult, Rule, RuleStatus, TestResult } from "../api/types";
-import { SeverityBadge, StateBadge } from "../components/badges";
+import { SeverityBadge } from "../components/badges";
 import { CodeEditor } from "../components/CodeEditor";
 import { AttackTags, Card, ConfirmDialog, Empty, ErrorBox, Field, JsonView, Loading, PageHeader, Tabs } from "../components/ui";
 import { TACTICS, tacticOf, type Tactic } from "../lib/attack";
@@ -70,7 +70,7 @@ function NewRule({ onDone }: { onDone: () => void }) {
           <button type="button" className="btn btn-primary self-end" disabled={create.isPending} onClick={() => create.mutate({ yaml, status }, { onSuccess: onDone })}>Save rule</button>
           <button type="button" className="btn self-end" onClick={onDone}>Cancel</button>
         </div>
-        <p className="text-[11px] text-muted">New rules start in shadow mode by default: they log matches without creating incidents until promoted.</p>
+        <p className="text-xs text-muted">New rules start in shadow mode by default: they log matches without creating incidents until promoted.</p>
         {create.error && <ErrorBox error={create.error} />}
       </div>
     </Card>
@@ -102,16 +102,15 @@ function RuleTable() {
       <div className="card overflow-x-auto">
         {q.isLoading ? <Loading what="rules" /> : q.error ? <ErrorBox error={q.error} /> : !rules.length ? <Empty>No rules.</Empty> : (
           <table className="tbl">
-            <thead><tr><th>Pack</th><th>Title</th><th>Level</th><th>Status</th><th>Hits</th><th>TP / FP</th><th>Set status</th></tr></thead>
+            <thead><tr><th>Rule</th><th>Level</th><th className="text-right">Hits</th><th className="text-right">TP / FP</th><th>Status</th></tr></thead>
             <tbody>
               {rules.map((r) => (
                 <tr key={r.id}>
-                  <td className="mono">{r.pack_name ?? r.pack_id}</td>
-                  <td><button type="button" className="text-left font-medium text-accent hover:underline" onClick={() => setOpen(open?.id === r.id ? null : r)}>{r.title}</button><div><AttackTags tags={r.attack_tags} /></div></td>
+                  <td><button type="button" className="text-left font-medium hover:underline" onClick={() => setOpen(open?.id === r.id ? null : r)}>{r.title}</button>
+                    <div className="mt-1 flex flex-wrap items-center gap-2"><span className="label">{r.pack_name ?? r.pack_id}</span><AttackTags tags={r.attack_tags} /></div></td>
                   <td><SeverityBadge severity={r.level} /></td>
-                  <td><StateBadge state={r.status} /></td>
-                  <td className="mono">{r.hits_total}</td>
-                  <td className="mono">{r.tp_total} / {r.fp_total}</td>
+                  <td className="num text-right">{r.hits_total}</td>
+                  <td className="num text-right text-muted">{r.tp_total} / {r.fp_total}</td>
                   <td><select aria-label={`Status for ${r.title}`} className="input" value={r.status} onChange={(e) => change(r, e.target.value as RuleStatus)}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></td>
                 </tr>
               ))}

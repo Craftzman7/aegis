@@ -46,7 +46,7 @@ export function ManualActionForm({ host, incidentId }: { host: Host; incidentId?
         <button type="submit" className={`btn ${spec.destructive ? "btn-danger" : "btn-primary"}`}>Execute on {host.hostname}</button>
         {ok && <span className="text-xs text-[#2fa66a]" role="status">Action submitted.</span>}
       </div>
-      <p className="text-[11px] text-muted">Manual actions are issued as you, go through the same bounds checks and signing path, and ignore the approval tier.</p>
+      <p className="text-xs text-muted">Manual actions are issued as you, go through the same bounds checks and signing path, and ignore the approval tier.</p>
       <ConfirmDialog open={pending !== null} danger={spec.destructive} busy={m.isPending} error={m.error} title={`Confirm: ${spec.label}`} confirmLabel="Execute"
         onCancel={() => { setPending(null); m.reset(); }}
         onConfirm={() => pending && m.mutate({ host_id: host.id, action: spec.name, params: pending, incident_id: incidentId }, { onSuccess: () => { setPending(null); setOk(true); setVals({}); } })}>

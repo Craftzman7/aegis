@@ -25,7 +25,7 @@ function Autonomy() {
           </label>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-muted">Per-host overrides on the host page take precedence over this setting.</p>
+      <p className="mt-2 text-xs text-muted">Per-host overrides on the host page take precedence over this setting.</p>
       <ConfirmDialog open={pending !== null} title="Change global autonomy" busy={set.isPending} error={set.error} danger={pending === "paused"}
         onCancel={() => { setPending(null); set.reset(); }} onConfirm={() => pending && set.mutate(pending, { onSuccess: () => setPending(null) })}>
         <p>Set AI autonomy for the whole fleet to <strong>{MODES.find((m) => m.id === pending)?.label}</strong>?</p>
@@ -59,7 +59,7 @@ function Enrollment() {
         <div className="mt-3 space-y-3">
           <p role="status" className="text-sev-medium">This token is shown only once. It expires {fmtTime(res.expires_at)} and works for a single enrollment.</p>
           {[["Token", res.token], ["Install", curl], ["Alternative", alt]].map(([l, t]) => (
-            <div key={l}><div className="mb-1 text-[11px] uppercase text-muted">{l}</div>
+            <div key={l}><div className="label mb-1">{l}</div>
               <div className="flex items-start gap-2"><code className="mono flex-1 break-all rounded border border-line bg-bg p-2">{t}</code><CopyButton text={t} /></div></div>
           ))}
         </div>

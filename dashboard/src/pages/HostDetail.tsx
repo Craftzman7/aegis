@@ -91,7 +91,7 @@ export function HostDetail() {
             {h.rule_errors?.length ? <ul className="mono space-y-1">{h.rule_errors.map((e) => <li key={e.rule_id}><span className="text-sev-high">{e.rule_id}</span>: {e.error}</li>)}</ul> : <Empty>All rules loaded cleanly.</Empty>}
           </Card>
           <Card title="Incidents">
-            {incidents.length ? <ul className="space-y-1.5">{incidents.map((i) => <li key={i.id} className="flex items-center gap-2"><SeverityBadge severity={i.severity} /><Link className="text-accent hover:underline" to={`/incidents/${i.id}`}>{i.title}</Link><StateBadge state={i.status} /></li>)}</ul> : <Empty>No incidents.</Empty>}
+            {incidents.length ? <ul className="space-y-1.5">{incidents.map((i) => <li key={i.id} className="flex items-center gap-2"><SeverityBadge severity={i.severity} /><Link className="text-muted underline-offset-2 hover:text-fg hover:underline" to={`/incidents/${i.id}`}>{i.title}</Link><StateBadge state={i.status} /></li>)}</ul> : <Empty>No incidents.</Empty>}
           </Card>
           <Card title="Recent anomalies">
             {anomalies.length ? <ul className="space-y-1.5">{anomalies.slice(0, 15).map((a) => <li key={a.id} className="flex items-start gap-2"><SeverityBadge severity={a.severity} /><span className="flex-1">{a.summary}</span><span className="text-muted whitespace-nowrap">{ago(a.ts)}</span></li>)}</ul> : <Empty>No anomalies.</Empty>}

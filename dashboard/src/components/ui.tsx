@@ -6,19 +6,19 @@ export function Card({ title, actions, children, className = "" }: { title?: Rea
   return (
     <section className={`card ${className}`}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h2>
+        <header className="flex items-center justify-between gap-2 px-4 pt-3.5">
+          <h2 className="text-sm font-medium">{title}</h2>
           <div className="flex items-center gap-2">{actions}</div>
         </header>
       )}
-      <div className="p-3">{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
 export function PageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <h1 className="text-lg font-semibold">{title}</h1>
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -26,15 +26,15 @@ export function PageHeader({ title, children }: { title: ReactNode; children?: R
 export const Loading = ({ what = "data" }: { what?: string }) => <div className="p-4 text-muted" role="status">Loading {what}...</div>;
 export const Empty = ({ children }: { children: ReactNode }) => <div className="p-4 text-center text-muted">{children}</div>;
 export function ErrorBox({ error }: { error: unknown }) {
-  return <div role="alert" className="rounded border border-sev-critical p-3 text-sev-critical">{errMsg(error)}</div>;
+  return <div role="alert" className="rounded-lg bg-sev-critical/10 px-3 py-2.5 text-sev-critical">{errMsg(error)}</div>;
 }
 export function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-xs">
       <span className="font-medium text-muted">{label}</span>
       {children}
-      {hint && !error && <span className="text-[11px] text-muted">{hint}</span>}
-      {error && <span role="alert" className="text-[11px] text-sev-critical">{error}</span>}
+      {hint && !error && <span className="text-xs text-muted">{hint}</span>}
+      {error && <span role="alert" className="text-xs text-sev-critical">{error}</span>}
     </label>
   );
 }
@@ -46,17 +46,17 @@ export function AttackTags({ tags }: { tags: string[] }) {
       {tags.map((t) => {
         const id = techniqueId(t);
         return id ? (
-          <a key={t} href={techniqueUrl(id)} target="_blank" rel="noreferrer" className="mono rounded border border-line bg-panel2 px-1.5 py-0.5 text-accent hover:underline">{id}</a>
+          <a key={t} href={techniqueUrl(id)} target="_blank" rel="noreferrer" className="mono rounded-md bg-panel2 px-1.5 py-0.5 text-muted hover:text-fg">{id}</a>
         ) : (
-          <span key={t} className="mono rounded border border-line px-1.5 py-0.5 text-muted">{t.replace(/^attack\./, "")}</span>
+          <span key={t} className="rounded-md bg-panel2 px-1.5 py-0.5 text-xs text-muted">{t.replace(/^attack\./, "")}</span>
         );
       })}
     </span>
   );
 }
 
-export const HostLink = ({ id, name }: { id: string; name?: string }) => <Link className="mono text-accent hover:underline" to={`/hosts/${id}`}>{name ?? short(id)}</Link>;
-export const IncidentLink = ({ id, label }: { id: string; label?: string }) => <Link className="mono text-accent hover:underline" to={`/incidents/${id}`}>{label ?? short(id)}</Link>;
+export const HostLink = ({ id, name }: { id: string; name?: string }) => <Link className="font-medium hover:underline" to={`/hosts/${id}`}>{name ?? short(id)}</Link>;
+export const IncidentLink = ({ id, label }: { id: string; label?: string }) => <Link className="font-medium hover:underline" to={`/incidents/${id}`}>{label ?? short(id)}</Link>;
 
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
@@ -72,9 +72,9 @@ export function JsonView({ value, collapsed = false, maxHeight = 320 }: { value:
   const [open, setOpen] = useState(!collapsed);
   const text = stringify(value);
   return (
-    <div className="rounded border border-line bg-bg">
-      <div className="flex items-center justify-between border-b border-line px-2 py-1">
-        <button type="button" className="text-[11px] text-muted hover:text-fg" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "v" : ">"} JSON</button>
+    <div className="rounded-lg border border-line bg-bg">
+      <div className="flex items-center justify-between border-b border-line px-2.5 py-1">
+        <button type="button" className="text-xs text-muted hover:text-fg" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"} JSON</button>
         <CopyButton text={text} />
       </div>
       {open && <pre className="mono overflow-auto p-2 whitespace-pre-wrap break-all" style={{ maxHeight }}>{text}</pre>}
@@ -99,7 +99,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
     <div role="tablist" className="mb-3 flex gap-1 border-b border-line">
       {tabs.map((t) => (
         <button key={t.id} role="tab" aria-selected={value === t.id} type="button" onClick={() => onChange(t.id)}
-          className={`px-3 py-1.5 text-sm ${value === t.id ? "border-b-2 border-accent text-fg" : "text-muted hover:text-fg"}`}>{t.label}</button>
+          className={`-mb-px px-3 py-2 text-sm ${value === t.id ? "border-b-2 border-fg font-medium text-fg" : "text-muted hover:text-fg"}`}>{t.label}</button>
       ))}
     </div>
   );
@@ -130,8 +130,8 @@ export function ConfirmDialog({ open, title, children, confirmLabel = "Confirm",
   }, [open, onCancel]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div ref={ref} role="alertdialog" aria-modal="true" aria-label={title} className="card w-full max-w-lg p-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div ref={ref} role="alertdialog" aria-modal="true" aria-label={title} className="card w-full max-w-lg p-5 shadow-2xl">
         <h2 className="mb-2 text-base font-semibold">{title}</h2>
         <div className="mb-4 space-y-2">{children}</div>
         {error != null && <div className="mb-3"><ErrorBox error={error} /></div>}

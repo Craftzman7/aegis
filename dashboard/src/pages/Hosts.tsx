@@ -18,7 +18,7 @@ export function Hosts() {
                 const off = isOffline(h.last_seen);
                 return (
                   <tr key={h.id}>
-                    <td><Link className="mono font-medium text-accent hover:underline" to={`/hosts/${h.id}`}>{h.hostname}</Link><div className="text-muted">{h.os} {h.arch}</div></td>
+                    <td><Link className="font-medium hover:underline" to={`/hosts/${h.id}`}>{h.hostname}</Link><div className="text-muted">{h.os} {h.arch}</div></td>
                     <td className="space-x-1">{off ? <StateBadge state="offline" /> : <StateBadge state={h.status} />}{off && h.status === "isolated" && <StateBadge state="isolated" />}</td>
                     <td className={off ? "text-sev-high" : "text-muted"}>{ago(h.last_seen)}</td>
                     <td className="mono">{h.agent_version ?? "-"}</td>

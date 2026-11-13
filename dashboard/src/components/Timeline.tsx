@@ -47,7 +47,7 @@ function AnomalyBody({ a }: { a: Anomaly }) {
       <div>{a.summary}</div>
       <AttackTags tags={a.attack_tags} />
       <div>
-        <button type="button" className="text-xs text-accent hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide evidence" : "Show evidence"}</button>
+        <button type="button" className="text-xs text-muted hover:text-fg" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide evidence" : "Show evidence"}</button>
       </div>
       {open && (
         <div className="space-y-2">
@@ -127,7 +127,7 @@ export function Timeline({ items, render }: { items: TimelineItem[]; render?: (i
         {shown.map((i) => (
           <li key={i.id} className="relative">
             <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full" style={{ background: KIND_COLOR[i.kind] }} aria-hidden="true" />
-            <div className="mb-0.5 flex items-center gap-2 text-[11px] text-muted"><time className="mono">{fmtTime(i.ts)}</time><span className="uppercase tracking-wide">{KIND_LABEL[i.kind]}</span></div>
+            <div className="mb-0.5 flex items-center gap-2 text-xs text-muted"><time className="mono">{fmtTime(i.ts)}</time><span className="first-letter:uppercase">{KIND_LABEL[i.kind]}</span></div>
             {render?.(i) ?? <TimelineBody item={i} />}
           </li>
         ))}

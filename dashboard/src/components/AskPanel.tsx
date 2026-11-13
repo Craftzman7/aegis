@@ -23,11 +23,11 @@ export function AskPanel({ incidentId }: { incidentId: string }) {
   };
   return (
     <div className="space-y-2">
-      <p className="rounded border border-line bg-panel2 px-2 py-1 text-[11px] text-muted">Read-only: the analyst can explain this incident but cannot run actions. Use the controls to respond.</p>
+      <p className="rounded-md bg-panel2 px-2.5 py-1.5 text-xs text-muted">Read-only: the analyst can explain this incident but cannot run actions. Use the controls to respond.</p>
       <div className="max-h-72 space-y-2 overflow-auto" aria-live="polite">
         {msgs.map((m, i) => (
           <div key={i} className={`rounded p-2 ${m.role === "you" ? "bg-panel2" : m.role === "error" ? "border border-sev-critical text-sev-critical" : "border border-line"}`}>
-            <div className="text-[11px] uppercase text-muted">{m.role === "you" ? "You" : m.role === "analyst" ? "AI analyst" : "Error"}</div>
+            <div className="label">{m.role === "you" ? "You" : m.role === "analyst" ? "AI analyst" : "Error"}</div>
             <div className="whitespace-pre-wrap">{m.text}</div>
           </div>
         ))}

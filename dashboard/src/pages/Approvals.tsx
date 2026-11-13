@@ -3,7 +3,7 @@ import { useApprovals, useApprove, useReject } from "../api/hooks";
 import type { Approval, JsonObject } from "../api/types";
 import { SeverityBadge } from "../components/badges";
 import { CodeEditor } from "../components/CodeEditor";
-import { Card, ConfirmDialog, Empty, ErrorBox, Field, HostLink, IncidentLink, KV, Loading, PageHeader } from "../components/ui";
+import { ConfirmDialog, Empty, ErrorBox, Field, HostLink, IncidentLink, KV, Loading, PageHeader } from "../components/ui";
 import { TTL_ACTIONS, actionSpec, describeAction, validateParams } from "../lib/actions";
 import { ago, asRecord, fmtTime, stringify } from "../lib/format";
 
@@ -52,18 +52,23 @@ function ApprovalCard({ a }: { a: Approval }) {
 
   const verb = mode?.kind === "reject" ? "Reject" : "Approve";
   return (
-    <Card title={<span className="mono normal-case">{a.action}</span>} actions={<span className="text-muted">proposed {ago(a.created_at)} by {a.proposed_by}</span>}>
-      <div className="grid gap-3 lg:grid-cols-3">
-        <div className="space-y-1">
-          <div>Host: <HostLink id={a.host_id} name={hostname} /></div>
-          {a.incident && <div className="flex items-center gap-2">Incident: <IncidentLink id={a.incident.id} label={a.incident.title} /><SeverityBadge severity={a.incident.severity} /></div>}
-          {!a.incident && a.incident_id && <div>Incident: <IncidentLink id={a.incident_id} /></div>}
-          <div className="text-muted">Tier {a.tier}{a.expires_at ? `, expires ${fmtTime(a.expires_at)}` : ""}</div>
+    <section className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-medium first-letter:uppercase">{describeAction(a.action, a.params, hostname)}</h2>
+          <p className="label mt-1">
+            Proposed by {a.proposed_by === "ai" ? "the AI analyst" : a.proposed_by.replace(/^human:/, "")} {ago(a.created_at)}{a.expires_at ? ` · expires ${fmtTime(a.expires_at)}` : ""}
+          </p>
         </div>
-        <div><div className="mb-1 text-[11px] uppercase text-muted">Parameters</div><KV data={a.params} /></div>
-        <div><div className="mb-1 text-[11px] uppercase text-muted">AI rationale</div><p className="whitespace-pre-wrap">{a.rationale ?? "No rationale provided."}</p></div>
+        {a.incident && <SeverityBadge severity={a.incident.severity} />}
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
+      <p className="mt-4 max-w-3xl whitespace-pre-wrap leading-relaxed">{a.rationale ?? "No rationale provided."}</p>
+      <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-3">
+        <div><dt className="label">Host</dt><dd className="mt-0.5"><HostLink id={a.host_id} name={hostname} /></dd></div>
+        <div><dt className="label">Incident</dt><dd className="mt-0.5 truncate">{a.incident ? <IncidentLink id={a.incident.id} label={a.incident.title} /> : a.incident_id ? <IncidentLink id={a.incident_id} /> : "None"}</dd></div>
+        <div><dt className="label">Parameters</dt><dd className="mt-0.5"><KV data={a.params} /></dd></div>
+      </dl>
+      <div className="mt-5 flex flex-wrap gap-2">
         <button type="button" className="btn btn-primary" onClick={() => setMode({ kind: "approve" })}>Approve</button>
         {TTL_ACTIONS.includes(a.action) && <button type="button" className="btn" onClick={() => setMode({ kind: "ttl" })}>Approve with TTL</button>}
         <button type="button" className="btn" onClick={() => setMode({ kind: "modify" })}>Modify params</button>
@@ -82,7 +87,7 @@ function ApprovalCard({ a }: { a: Approval }) {
           {spec?.destructive && <p className="text-sev-high">This is a live, disruptive change. It will be signed and dispatched to the agent immediately.</p>}
         </>)}
       </ConfirmDialog>
-    </Card>
+    </section>
   );
 }
 
@@ -92,7 +97,7 @@ export function Approvals() {
     <>
       <PageHeader title="Approvals" />
       {q.isLoading ? <Loading what="approvals" /> : q.error ? <ErrorBox error={q.error} /> : !q.data?.length ? <Empty>Nothing waiting for approval.</Empty> : (
-        <div className="space-y-4">{q.data.map((a) => <ApprovalCard key={a.id} a={a} />)}</div>
+        <div className="space-y-3">{q.data.map((a) => <ApprovalCard key={a.id} a={a} />)}</div>
       )}
     </>
   );
