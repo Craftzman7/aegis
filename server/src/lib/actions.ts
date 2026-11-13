@@ -102,10 +102,13 @@ export async function dispatchAction(env: Env, action: ActionRow, actor: string,
     expires_at: new Date(now + ttl * 1000).toISOString(),
   };
   const envelope = await signEnvelope(env.SIGNING_KEY_JWK, cmd);
+  // Mark dispatched BEFORE pushing: the agent can answer over /v1/results within ms, and writing
+  // "dispatched" afterwards would overwrite its succeeded/failed state.
+  await setActionState(env, action.id, "dispatched");
   try {
     const { delivered } = await hostStub(env, action.host_id).pushCommand(cmd.id, envelope, now + ttl * 1000);
     await audit(env, { actor, event: "action.dispatched", incident_id: action.incident_id, host_id: action.host_id, action_id: action.id, detail: { action: action.action, params, pushed_over_ws: delivered } });
-    return await setActionState(env, action.id, "dispatched");
+    return (await getAction(env, action.id)) ?? action;
   } catch (e) {
     logError("dispatch failed", e, { action_id: action.id });
     return await setActionState(env, action.id, "failed", { error: "dispatch: " + errMsg(e) });
