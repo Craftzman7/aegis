@@ -6,7 +6,7 @@ An autonomous blue-team SOC. A small agent on each Linux host detects suspicious
  Linux host                         Cloudflare
 ┌────────────────────┐ signed HTTPS ┌──────────────────────────────────────────┐
 │ aegis-agent (Go)   │ ───────────▶ │ Worker: ingest ─▶ Queue ─▶ Workflow      │
-│  collectors        │              │   AI analyst (Workers AI, DeepSeek V4.1) │
+│  collectors        │              │   AI agent loop (Workers AI, DeepSeek)   │
 │  Sigma + native    │ ◀─ WebSocket │   policy gate (authoritative)            │
 │  executor          │ signed cmds  │ D1 · R2 · Vectorize · Durable Objects    │
 └────────────────────┘              │ Dashboard (behind Cloudflare Access)     │
@@ -17,11 +17,15 @@ An autonomous blue-team SOC. A small agent on each Linux host detects suspicious
 
 1. **Detect.** The agent watches auth logs, processes (`/proc`, auditd), network connections, file integrity and users. It evaluates Sigma rules plus native and baseline detectors locally, and ships only anomalies.
 2. **Correlate.** The server groups anomalies per host into incidents and starts an investigation Workflow.
-3. **Investigate.** The AI returns a verdict, severity and confidence, plus typed requests from a fixed vocabulary.
-4. **Gate.** Every request is checked against bounds:
+3. **Investigate.** The AI analyst works as an agent. It calls tools one at a time and sees each result before choosing the next:
+   - **On the host:** evidence collection (files, processes, connections, logs) and rule backtests.
+   - **On the server, read-only:** the host's history, a fleet-wide search for IOCs or hashes, similar past incidents, and rule details.
+
+   It's bounded by a budget of calls, turns and time.
+4. **Gate.** Every tool call is checked against bounds:
    - **Tier 0** (evidence collection, watches, shadow-mode rules) runs automatically.
-   - **Tier 1** (kill, block, quarantine, disable user, isolate, suppress, disable rule) waits for human approval.
-5. **Act.** Commands are Ed25519-signed and executed by the agent's allowlisted executor. Results flow back and the AI re-analyzes, for up to a few rounds.
+   - **Tier 1** (kill, block, quarantine, disable user, isolate, suppress, disable rule) is proposed. A second-opinion review checks the proposal first, without seeing the investigator's reasoning. Then it waits for human approval.
+5. **Act and verify.** Commands are Ed25519-signed and executed by the agent's allowlisted executor. After containment, the AI checks with tools that it held. Containment that is both successful and verified marks the incident **resolved**, and a human confirms it with one click.
 6. **Learn.** Analyst verdicts (true or false positive) are stored in Vectorize memory and inform later triage.
 
 ## Quick start
