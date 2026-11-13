@@ -108,8 +108,26 @@ export async function consoleReq(e: Env, method: string, path: string, body?: un
 }
 
 export async function cleanDb(): Promise<void> {
-  for (const t of ["audit_log", "ai_reviews", "actions", "anomalies", "incidents", "iocs", "enroll_tokens", "policies", "hosts"]) await env.DB.prepare(`DELETE FROM ${t}`).run();
+  for (const t of ["agent_turns", "audit_log", "ai_reviews", "actions", "anomalies", "incidents", "iocs", "enroll_tokens", "policies", "hosts"]) await env.DB.prepare(`DELETE FROM ${t}`).run();
   await env.DB.prepare("DELETE FROM rules").run();
   await env.DB.prepare("INSERT OR IGNORE INTO policies(host_id, version, body_json, created_by, reason, created_at) VALUES ('default', 1, '{\"thresholds\":{\"native:ssh_bruteforce.count\":10,\"native:ssh_bruteforce.window_s\":60,\"baseline.zscore\":4}}', 'system','seed','1970-01-01T00:00:00.000Z')").run();
   await env.DB.prepare("UPDATE settings SET value='autonomous' WHERE key='autonomy'").run();
+}
+
+/** Minimal in-process WorkflowStep: runs callbacks inline; waitForEvent is driven by a test hook (return true = event arrived). */
+export class FakeStep {
+  names: string[] = [];
+  constructor(private onWait: (name: string, type: string) => Promise<boolean>) {}
+  async do(name: string, a: unknown, b?: unknown) {
+    this.names.push(name);
+    const cb = (typeof a === "function" ? a : b) as (ctx: unknown) => Promise<unknown>;
+    return cb({ step: { name, count: 1 }, attempt: 1, config: {} });
+  }
+  async waitForEvent(name: string, o: { type: string }) {
+    this.names.push(name);
+    if (await this.onWait(name, o.type)) return { payload: {}, timestamp: new Date(), type: o.type };
+    throw new Error("timeout");
+  }
+  async sleep() {}
+  async sleepUntil() {}
 }

@@ -73,7 +73,7 @@ describe("console API", () => {
     expect(list[0].attack_tags).toBeInstanceOf(Array);
     expect(((await (await consoleReq(f.env, "GET", "/incidents?status=closed_tp")).json()) as J[]).length).toBe(0);
     const d = (await (await consoleReq(f.env, "GET", `/incidents/${f.inc.id}`)).json()) as J;
-    expect(Object.keys(d).sort()).toEqual(["actions", "anomalies", "audit", "incident", "reviews"]);
+    expect(Object.keys(d).sort()).toEqual(["actions", "anomalies", "audit", "incident", "reviews", "turns"]);
     expect((await consoleReq(f.env, "GET", "/incidents/nope")).status).toBe(404);
   });
   it("manual actions go through gate bounds; tier ignored; audited", async () => {

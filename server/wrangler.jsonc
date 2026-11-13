@@ -54,6 +54,7 @@
   "vars": {
     "AI_MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "AI_GATEWAY_ID": "aegis",
+    "AGENT_MODE": "loop", // "loop" (tool-calling agent) or "rounds" (legacy fixed rounds; rollback switch)
     "DEV_MODE": "false",
     "ACCESS_TEAM_DOMAIN": "aegis-soc.cloudflareaccess.com",
     "ACCESS_AUD": "75568d44b65f859a095057b3d833450b3546902328576c88868b7585e195abb9"

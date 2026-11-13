@@ -129,6 +129,7 @@ export interface ActionRow {
   rollback_token: string | null;
   rollback_of: string | null;
   expires_at: string | null;
+  critic_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -151,4 +152,14 @@ export interface RuleRow {
   updated_at: string;
 }
 
-export type FleetEventType = "anomaly" | "incident" | "ai_review" | "action" | "host" | "audit" | "policy";
+export type FleetEventType = "anomaly" | "incident" | "ai_review" | "action" | "host" | "audit" | "policy" | "agent_turn";
+
+/** Incident status (stored as free text). "resolved" = containment succeeded and the AI verified it; a human confirms -> closed_tp. */
+export type IncidentStatus = "open" | "investigating" | "awaiting_approval" | "contained" | "resolved" | "closed_benign" | "closed_tp" | "closed_fp";
+
+export interface CriticNotes {
+  decision: "submit" | "revise";
+  concerns: string[];
+  missing_checks: string[];
+  round: number;
+}

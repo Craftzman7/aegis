@@ -1,5 +1,5 @@
 import type { ActionRow, Approval, AutonomyMode, Host, Incident, JsonObject, PolicyRow, Rule, RuleStatus, Severity } from "../api/types";
-import { ACTIONS, ANOMALIES, AUDIT, HOSTS, INCIDENTS, REVIEWS, RULES, policyHistory, t } from "./fixtures";
+import { ACTIONS, ANOMALIES, AUDIT, HOSTS, INCIDENTS, REVIEWS, RULES, TURNS, policyHistory, t } from "./fixtures";
 
 /** In-browser mock of the /console/api contract (fetch shim). Mutations update in-memory state. */
 const state = {
@@ -68,7 +68,7 @@ function route(method: string, path: string, q: URLSearchParams, body: JsonObjec
   if ((m = /^\/incidents\/([^/]+)$/.exec(path)) && method === "GET") {
     const incident = state.incidents.find((i) => i.id === m![1]);
     if (!incident) return fail(404, "incident not found");
-    return json({ incident, anomalies: ANOMALIES.filter((a) => a.incident_id === incident.id), reviews: REVIEWS.filter((r) => r.incident_id === incident.id), actions: state.actions.filter((a) => a.incident_id === incident.id), audit: state.audit.filter((a) => a.incident_id === incident.id).reverse() });
+    return json({ incident, anomalies: ANOMALIES.filter((a) => a.incident_id === incident.id), reviews: REVIEWS.filter((r) => r.incident_id === incident.id), actions: state.actions.filter((a) => a.incident_id === incident.id), audit: state.audit.filter((a) => a.incident_id === incident.id).reverse(), turns: TURNS.filter((x) => x.incident_id === incident.id) });
   }
   if ((m = /^\/incidents\/([^/]+)\/verdict$/.exec(path)) && method === "POST") {
     const i = state.incidents.find((x) => x.id === m![1]);

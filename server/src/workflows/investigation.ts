@@ -1,7 +1,11 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { analyze, AnalystError, type AnalystOutput } from "../ai/analyst";
+import { AGENT_SYSTEM_PROMPT, analyze, AnalystError, buildUserPrompt, type AnalystOutput } from "../ai/analyst";
 import { loadContext } from "../ai/context";
+import { extractAssistantText, parseToolCalls, runChat, type ParsedToolCall } from "../ai/runner";
+import { actionState, completeWait, isTerminal, pendingApprovedIds, runTool, toolSpecs, type ToolOutcome, type WaitSpec } from "../ai/tools";
+import { getTurn, injectSeq, insertTurn, loadTurns, MAX_CALLS_PER_TURN, toMessages, turnBase } from "../ai/transcript";
 import { rememberIncident } from "../ai/memory";
+import { recordReview } from "../lib/reviews";
 import { audit } from "../lib/audit";
 import { createAction, dispatchAction, getAction, getAutonomy, PROPOSAL_TTL_S, setActionState } from "../lib/actions";
 import { publish } from "../lib/fleet";
@@ -18,6 +22,14 @@ export interface InvestigationParams {
 export const MAX_REANALYZE_ROUNDS = 3;
 export const EVIDENCE_TIMEOUT = "5 minutes";
 export const APPROVAL_TIMEOUT = "24 hours";
+// Loop budgets (AGENT_MODE=loop). Wall time excludes approval waits.
+export const MAX_TOOL_CALLS = 30;
+export const MAX_TURNS = 20;
+export const LOOP_WALL_MS = 20 * 60 * 1000;
+export const EVIDENCE_WAIT = "60 seconds";
+export const MAX_EVIDENCE_WAITS = 15;
+export const NUDGE_TEXT = "You did not call a tool. Call a tool, or call finish if you are done.";
+export const BUDGET_TEXT = "budget exhausted: call finish now";
 
 const AI_STEP_CFG = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 const DB_STEP_CFG = { retries: { limit: 3, delay: "2 seconds", backoff: "exponential" }, timeout: "1 minute" } as const;
@@ -63,22 +75,7 @@ export async function analyzeStep(env: Env, incidentId: string, step: "triage" |
   const ctx = await loadContext(env, incidentId, step, round);
   const res = await analyze(env, ctx);
   const o = res.output;
-  const ts = nowIso();
-  await env.DB.prepare("INSERT OR IGNORE INTO ai_reviews(id, incident_id, step, round, model, prompt_hash, output_json, gate_json, ts) VALUES (?,?,?,?,?,?,?,NULL,?)")
-    .bind(reviewId, incidentId, step, round, res.model, res.promptHash, JSON.stringify(o), ts).run();
-  const tags = [...new Set([...safeJson<string[]>(inc.attack_tags_json, []), ...o.attack_tags])].slice(0, 40);
-  await env.DB.prepare(
-    "UPDATE incidents SET verdict=?, severity=?, confidence=?, attack_tags_json=?, status=CASE WHEN status='open' THEN 'investigating' ELSE status END, updated_at=? WHERE id=? AND status NOT LIKE 'closed%'",
-  ).bind(o.verdict, o.severity, o.confidence, JSON.stringify(tags), ts, incidentId).run();
-  for (const ioc of o.iocs.slice(0, 30)) {
-    // AI-extracted IOCs are NOT pushed to agents (watch=0) until a human confirms the incident.
-    await env.DB.prepare("INSERT OR IGNORE INTO iocs(id, type, value, source, incident_id, watch, first_seen) VALUES (?,?,?,?,?,0,?)")
-      .bind(crypto.randomUUID(), ioc.type, ioc.type === "sha256" ? ioc.value.toLowerCase() : ioc.value, "ai", incidentId, ts).run();
-  }
-  await audit(env, { actor: "ai", event: `ai.${step}`, incident_id: incidentId, host_id: inc.host_id, detail: { review_id: reviewId, verdict: o.verdict, severity: o.severity, confidence: o.confidence, requests: o.requests.length, repaired: res.repaired } });
-  const row = await env.DB.prepare("SELECT * FROM ai_reviews WHERE id=?").bind(reviewId).first<Record<string, unknown>>();
-  if (row) await publish(env, "ai_review", row);
-  await publishIncident(env, incidentId);
+  await recordReview(env, incidentId, { reviewId, step, round, model: res.model, promptHash: res.promptHash, output: o, auditExtra: { repaired: res.repaired } });
   return { skipped: false, review_id: reviewId, verdict: o.verdict, severity: o.severity, confidence: o.confidence };
 }
 
@@ -179,7 +176,13 @@ export async function finalizeStep(env: Env, incidentId: string, review: ReviewR
     "SELECT COUNT(*) AS n FROM actions WHERE incident_id=? AND state='succeeded' AND action IN ('kill_process','block_ip','disable_user','quarantine_file','isolate_host')",
   ).bind(incidentId).first<{ n: number }>();
   let status = "open";
-  if ((contained?.n ?? 0) > 0) status = "contained";
+  // resolved = containment succeeded AND the AI verified it: it claims verified=true AND an evidence check actually
+  // succeeded after the last containment (the claim alone is not trusted). A human confirms resolved -> closed_tp.
+  const checked = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM actions e WHERE e.incident_id=?1 AND e.action='collect_evidence' AND e.state='succeeded' AND e.created_at >
+       (SELECT MAX(c.updated_at) FROM actions c WHERE c.incident_id=?1 AND c.state='succeeded' AND c.action IN ('kill_process','block_ip','disable_user','quarantine_file','isolate_host'))`,
+  ).bind(incidentId).first<{ n: number }>();
+  if ((contained?.n ?? 0) > 0) status = out?.verified === true && (checked?.n ?? 0) > 0 ? "resolved" : "contained";
   else if (out && out.verdict === "benign" && out.confidence >= 0.7) status = "closed_benign";
   const now = nowIso();
   await env.DB.prepare(
@@ -200,6 +203,90 @@ export async function memoryStep(env: Env, incidentId: string): Promise<boolean>
     { incident_id: incidentId, host_id: inc.host_id, title: truncate(inc.title, 200), verdict: inc.verdict ?? "", label: "", severity: inc.severity, summary: truncate(summary, 600), rule_ids: rules.join(",").slice(0, 500) },
     `${inc.title}\n${summary}\n${safeJson<string[]>(inc.attack_tags_json, []).join(" ")}`,
   );
+}
+
+// ---------------- loop step bodies (AGENT_MODE=loop; each idempotent) ----------------
+
+export async function initLoopStep(env: Env, incidentId: string, runId: string): Promise<{ skipped: boolean; startedAt: number }> {
+  const inc = await getIncident(env, incidentId);
+  if (!inc || isClosed(inc.status)) return { skipped: true, startedAt: 0 };
+  if ((await getAutonomy(env, inc.host_id)) === "paused") {
+    await audit(env, { actor: "ai", event: "ai.skipped_paused", incident_id: incidentId, host_id: inc.host_id });
+    return { skipped: true, startedAt: 0 };
+  }
+  if (!(await getTurn(env, runId, 0))) {
+    const ctx = await loadContext(env, incidentId, "triage", 0);
+    await insertTurn(env, { incident_id: incidentId, run_id: runId, seq: 0, role: "user", content: { text: buildUserPrompt(ctx, undefined, true) } });
+  }
+  return { skipped: false, startedAt: Date.now() };
+}
+
+export interface TurnResult {
+  skipped: boolean;
+  now: number;
+  calls: ParsedToolCall[];
+}
+
+export async function turnStep(env: Env, incidentId: string, runId: string, n: number, opts: { inject: "nudge" | "budget" | null; force: boolean }): Promise<TurnResult> {
+  const inc = await getIncident(env, incidentId);
+  if (!inc || isClosed(inc.status) || (await getAutonomy(env, inc.host_id)) === "paused") return { skipped: true, now: Date.now(), calls: [] };
+  if (opts.inject) await insertTurn(env, { incident_id: incidentId, run_id: runId, seq: injectSeq(n), role: "user", content: { text: opts.inject === "budget" ? BUDGET_TEXT : NUDGE_TEXT } });
+  if (!(await getTurn(env, runId, turnBase(n)))) {
+    const messages = toMessages(await loadTurns(env, runId));
+    const raw = await runChat(env, messages, {
+      tools: toolSpecs(opts.force ? "finish" : undefined),
+      toolChoice: opts.force ? { type: "function", function: { name: "finish" } } : "auto",
+      maxTokens: 3000,
+    });
+    const calls = parseToolCalls(raw, `call_${n}`).slice(0, MAX_CALLS_PER_TURN);
+    const text = truncate(extractAssistantText(raw), 4000);
+    await insertTurn(env, { incident_id: incidentId, run_id: runId, seq: turnBase(n), role: "assistant", content: { ...(text ? { text } : {}), ...(calls.length ? { tool_calls: calls } : {}) } });
+    await audit(env, { actor: "ai", event: "ai.turn", incident_id: incidentId, host_id: inc.host_id, detail: { run_id: runId, turn: n, tool_calls: calls.map((c) => c.name), forced: opts.force } });
+  }
+  const row = await getTurn(env, runId, turnBase(n));
+  const stored = safeJson<{ tool_calls?: ParsedToolCall[] }>(row?.content_json, {});
+  return { skipped: false, now: Date.now(), calls: stored.tool_calls ?? [] };
+}
+
+export interface ToolStepResult {
+  done: boolean;
+  wait?: WaitSpec;
+}
+
+async function writeToolTurn(env: Env, incidentId: string, runId: string, n: number, i: number, call: ParsedToolCall, o: ToolOutcome): Promise<void> {
+  await insertTurn(env, {
+    incident_id: incidentId, run_id: runId, seq: turnBase(n) + 1 + i, role: "tool", tool_name: call.name, tool_call_id: call.id,
+    content: { ...(o.error !== undefined ? { error: o.error } : { result: o.result ?? null }), ...(o.action_id ? { action_id: o.action_id } : {}) },
+  });
+}
+
+export async function toolStep(env: Env, incidentId: string, runId: string, n: number, i: number, call: ParsedToolCall, over: boolean): Promise<ToolStepResult> {
+  const prior = await getTurn(env, runId, turnBase(n) + 1 + i);
+  if (prior) return { done: call.name === "finish" && !safeJson<{ error?: string }>(prior.content_json, {}).error };
+  const inc = (await getIncident(env, incidentId))!;
+  const o = over && call.name !== "finish"
+    ? ({ error: "tool-call budget exhausted: call finish now" } as ToolOutcome)
+    : await runTool({ env, incidentId, hostId: inc.host_id, runId, n, i }, call.name, call.arguments);
+  await audit(env, { actor: "ai", event: "tool.called", incident_id: incidentId, host_id: inc.host_id, action_id: o.action_id ?? null, detail: { run_id: runId, turn: n, tool: call.name, ok: o.error === undefined, error: o.error } });
+  if (o.wait) return { done: false, wait: o.wait };
+  await writeToolTurn(env, incidentId, runId, n, i, call, o);
+  return { done: !!o.done && o.error === undefined };
+}
+
+export async function toolDoneStep(env: Env, incidentId: string, runId: string, n: number, i: number, call: ParsedToolCall, wait: WaitSpec): Promise<boolean> {
+  await writeToolTurn(env, incidentId, runId, n, i, call, await completeWait(env, incidentId, wait));
+  return true;
+}
+
+/** The review finalize should read: this run's finish() review, else the last known review of the incident. */
+export async function loopReviewRef(env: Env, incidentId: string, runId: string): Promise<ReviewRef> {
+  const finalId = await deterministicUuid(`review:${incidentId}:${runId}:final:0`);
+  const row =
+    (await env.DB.prepare("SELECT id, output_json FROM ai_reviews WHERE id=?").bind(finalId).first<{ id: string; output_json: string }>()) ??
+    (await env.DB.prepare("SELECT id, output_json FROM ai_reviews WHERE incident_id=? AND step!='ask' ORDER BY ts DESC LIMIT 1").bind(incidentId).first<{ id: string; output_json: string }>());
+  if (!row) return { skipped: true, review_id: "", verdict: "", severity: "", confidence: 0 };
+  const o = safeJson<AnalystOutput>(row.output_json, null as unknown as AnalystOutput);
+  return { skipped: false, review_id: row.id, verdict: o.verdict, severity: o.severity, confidence: o.confidence };
 }
 
 // ---------------- the workflow ----------------
@@ -239,7 +326,105 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
     });
   }
 
+  /** Wait (60s slices) until an action is terminal. The evidence event is only a hint: D1 is re-read each time. */
+  private async waitForAction(step: WorkflowStep, tag: string, actionId: string): Promise<void> {
+    for (let k = 0; k < MAX_EVIDENCE_WAITS; k++) {
+      const st = await step.do(`wait-check:${tag}:${k}`, DB_STEP_CFG, () => actionState(this.env, actionId));
+      if (isTerminal(st) || st === "missing") return;
+      try {
+        await step.waitForEvent(`wait-evt:${tag}:${k}`, { type: "evidence", timeout: EVIDENCE_WAIT });
+      } catch {
+        /* timeout: loop re-reads D1 */
+      }
+    }
+    await step.do(`wait-expire:${tag}`, DB_STEP_CFG, async () => {
+      const a = await getAction(this.env, actionId);
+      if (a && a.state === "dispatched") await setActionState(this.env, actionId, "expired", { error: "no result from agent before timeout" });
+      return true;
+    });
+  }
+
   async run(event: Readonly<WorkflowEvent<InvestigationParams>>, step: WorkflowStep): Promise<{ status: string; rounds: number }> {
+    return (this.env.AGENT_MODE ?? "loop") === "rounds" ? this.runRounds(event, step) : this.runLoop(event, step);
+  }
+
+  private async runLoop(event: Readonly<WorkflowEvent<InvestigationParams>>, step: WorkflowStep): Promise<{ status: string; rounds: number }> {
+    const id = event.payload.incident_id;
+    const runId = event.instanceId;
+    const start = await step.do("start", DB_STEP_CFG, () => startStep(this.env, id));
+    if (start.closed) return { status: "closed", rounds: 0 };
+    let n = 0;
+    try {
+      const init = await step.do("loop-init", AI_STEP_CFG, () => initLoopStep(this.env, id, runId));
+      if (init.skipped) return { status: "skipped", rounds: 0 };
+      let lastNow = init.startedAt;
+      let approvalWait = 0;
+      let toolCalls = 0;
+      let noTool = 0;
+      let forced = false;
+      let forcedTurns = 0;
+      let finished = false;
+      for (; !finished; n++) {
+        const budget = forced || toolCalls >= MAX_TOOL_CALLS || n >= MAX_TURNS || lastNow - init.startedAt - approvalWait > LOOP_WALL_MS;
+        const force = budget || noTool >= 2;
+        const inject = budget && !forced ? ("budget" as const) : noTool === 1 && !force ? ("nudge" as const) : null;
+        if (force) {
+          forced = true;
+          if (++forcedTurns > 2) break; // the model will not finish: finalize with the last known verdict
+        }
+        // Rpc.Serializable can't express Record<string, unknown> (tool arguments are JSON by construction)
+        const t = (await step.do(`turn:${n}`, AI_STEP_CFG, () => turnStep(this.env, id, runId, n, { inject, force }) as Promise<never>)) as TurnResult;
+        if (t.skipped) return { status: "skipped", rounds: n };
+        lastNow = t.now;
+        if (t.calls.length === 0) {
+          noTool++;
+          continue;
+        }
+        noTool = 0;
+        for (let i = 0; i < t.calls.length && !finished; i++) {
+          const call = t.calls[i]!;
+          const over = toolCalls >= MAX_TOOL_CALLS;
+          if (call.name !== "finish") toolCalls++;
+          const r = await step.do(`tool:${n}:${i}`, DB_STEP_CFG, () => toolStep(this.env, id, runId, n, i, call, over));
+          if (r.wait) {
+            const w = r.wait;
+            const tag = `${n}:${i}`;
+            if (w.kind === "action") await this.waitForAction(step, tag, w.action_id);
+            else {
+              const t0 = await step.do(`appr-start:${tag}`, DB_STEP_CFG, async () => Date.now());
+              await this.waitForApprovals(step, id, `a${tag}`);
+              const t1 = await step.do(`appr-end:${tag}`, DB_STEP_CFG, async () => Date.now());
+              approvalWait += t1 - t0;
+              lastNow = t1;
+              const ids = await step.do(`appr-dispatched:${tag}`, DB_STEP_CFG, () => pendingApprovedIds(this.env, id));
+              for (const aid of ids) await this.waitForAction(step, `${tag}:${aid.slice(0, 8)}`, aid);
+            }
+            await step.do(`tool-done:${tag}`, DB_STEP_CFG, () => toolDoneStep(this.env, id, runId, n, i, call, w));
+          } else if (r.done) finished = true;
+        }
+      }
+      const ref = await step.do("final-ref", DB_STEP_CFG, () => loopReviewRef(this.env, id, runId));
+      const done = await step.do("finalize", DB_STEP_CFG, () => finalizeStep(this.env, id, ref));
+      await step.do("remember", DB_STEP_CFG, () => memoryStep(this.env, id));
+      return { status: done.status, rounds: n };
+    } catch (e) {
+      logError("investigation failed", e, { incident_id: id, analyst_error: e instanceof AnalystError });
+      return this.recordFailure(step, id, errMsg(e), n);
+    }
+  }
+
+  private async recordFailure(step: WorkflowStep, id: string, msg: string, rounds: number): Promise<{ status: string; rounds: number }> {
+    await step.do("record-failure", DB_STEP_CFG, async () => {
+      await audit(this.env, { actor: "ai", event: "ai.failed", incident_id: id, detail: { error: msg } });
+      await this.env.DB.prepare("UPDATE incidents SET status='open', updated_at=? WHERE id=? AND status NOT LIKE 'closed%'").bind(nowIso(), id).run();
+      await publishIncident(this.env, id);
+      return true;
+    });
+    return { status: "failed", rounds };
+  }
+
+  /** Legacy fixed-rounds path (AGENT_MODE=rounds), kept for rollback. */
+  private async runRounds(event: Readonly<WorkflowEvent<InvestigationParams>>, step: WorkflowStep): Promise<{ status: string; rounds: number }> {
     const id = event.payload.incident_id;
     const start = await step.do("start", DB_STEP_CFG, () => startStep(this.env, id));
     if (start.closed) return { status: "closed", rounds: 0 };

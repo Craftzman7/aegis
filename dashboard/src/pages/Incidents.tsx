@@ -5,7 +5,7 @@ import { ConfidenceBar, SeverityBadge, StateBadge, VerdictBadge } from "../compo
 import { AttackTags, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { ago } from "../lib/format";
 
-const STATUSES = ["open", "investigating", "awaiting_approval", "contained", "closed_benign", "closed_tp"];
+const STATUSES = ["open", "investigating", "awaiting_approval", "contained", "resolved", "closed_benign", "closed_tp"];
 
 export function Incidents() {
   const [sp, setSp] = useSearchParams();

@@ -32,16 +32,17 @@ export interface NewAction {
   reject_reason?: string | null;
   rollback_of?: string | null;
   expires_at?: string | null;
+  critic?: unknown;
 }
 
 /** Idempotent insert (same id => no-op). Returns the stored row. */
 export async function createAction(env: Env, a: NewAction): Promise<ActionRow> {
   const now = nowIso();
   const res = await env.DB.prepare(
-    `INSERT OR IGNORE INTO actions(id, incident_id, host_id, action, params_json, tier, kind, state, proposed_by, rationale, approved_by, reject_reason, rollback_of, expires_at, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT OR IGNORE INTO actions(id, incident_id, host_id, action, params_json, tier, kind, state, proposed_by, rationale, approved_by, reject_reason, rollback_of, expires_at, critic_json, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   )
-    .bind(a.id, a.incident_id, a.host_id, a.action, JSON.stringify(a.params), a.tier, a.kind, a.state, a.proposed_by, a.rationale ?? null, a.approved_by ?? null, a.reject_reason ?? null, a.rollback_of ?? null, a.expires_at ?? null, now, now)
+    .bind(a.id, a.incident_id, a.host_id, a.action, JSON.stringify(a.params), a.tier, a.kind, a.state, a.proposed_by, a.rationale ?? null, a.approved_by ?? null, a.reject_reason ?? null, a.rollback_of ?? null, a.expires_at ?? null, a.critic === undefined ? null : JSON.stringify(a.critic), now, now)
     .run();
   const row = (await getAction(env, a.id))!;
   if (res.meta.changes) {

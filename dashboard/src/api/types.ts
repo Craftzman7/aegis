@@ -10,7 +10,7 @@ export type AutonomyMode = "autonomous" | "propose_only" | "paused";
 export type HostStatus = "ok" | "degraded" | "isolated";
 
 export type IncidentStatus =
-  | "open" | "investigating" | "awaiting_approval" | "contained" | "closed_benign" | "closed_tp";
+  | "open" | "investigating" | "awaiting_approval" | "contained" | "resolved" | "closed_benign" | "closed_tp";
 export type Verdict = "benign" | "suspicious" | "malicious" | "true_positive" | "false_positive";
 
 export type ActionState =
@@ -64,12 +64,22 @@ export interface AiReview {
   model: string; prompt_hash: string | null; output: AiOutput; gate: GateDecision[] | null; ts: string;
 }
 
+export interface CriticNotes { decision: "submit" | "revise"; concerns: string[]; missing_checks: string[]; round: number }
+
+export interface AgentToolCall { id: string; name: string; arguments: JsonObject }
+export interface AgentTurn {
+  id: string; incident_id: string; run_id: string; seq: number; ts: string;
+  role: "user" | "assistant" | "tool"; tool_name: string | null; tool_call_id: string | null;
+  content: { text?: string; tool_calls?: AgentToolCall[]; result?: unknown; error?: string; action_id?: string };
+}
+
 export interface ActionRow {
   id: string; incident_id: string | null; host_id: string; action: ActionName; params: JsonObject;
   tier: number; kind: "command" | "policy"; state: ActionState; proposed_by: string;
   rationale: string | null; approved_by: string | null; reject_reason: string | null;
   result: JsonObject | null; error: string | null; rollback_token: string | null; rollback_of: string | null;
   expires_at: string | null; created_at: string; updated_at: string;
+  critic?: CriticNotes | null;
 }
 /** Approval inbox item: action row joined with its incident and host. */
 export interface Approval extends ActionRow {
@@ -116,6 +126,7 @@ export interface HostDetail {
 }
 export interface IncidentDetail {
   incident: Incident; anomalies: Anomaly[]; reviews: AiReview[]; actions: ActionRow[]; audit: AuditEntry[];
+  turns?: AgentTurn[];
   host?: Host | null;
 }
 
@@ -123,5 +134,5 @@ export interface Coverage { techniques: { id: string; rules: number | string[]; 
 export interface LintResult { ok: boolean; errors: (string | { message: string; line?: number })[] }
 export interface TestResult { matches?: number; samples?: unknown[]; [k: string]: unknown }
 
-export type LiveType = "anomaly" | "incident" | "ai_review" | "action" | "host" | "audit" | "policy";
+export type LiveType = "anomaly" | "incident" | "ai_review" | "action" | "host" | "audit" | "policy" | "agent_turn";
 export interface LiveMessage { type: LiveType; data: Record<string, unknown>; ts: string }

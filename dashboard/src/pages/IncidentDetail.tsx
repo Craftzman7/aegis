@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import type { AiOutput } from "../api/types";
 import { api } from "../api/client";
 import { useHosts, useIncident, useVerdict } from "../api/hooks";
 import { ConfidenceBar, SeverityBadge, StateBadge, VerdictBadge } from "../components/badges";
@@ -16,11 +17,14 @@ export function IncidentDetail() {
   const verdict = useVerdict();
   const [pending, setPending] = useState<"true_positive" | "false_positive" | null>(null);
   const [note, setNote] = useState("");
-  const timeline = useMemo(() => q.data ? buildTimeline(q.data.anomalies, q.data.reviews.filter((r) => r.step !== "ask"), q.data.actions, q.data.audit) : [], [q.data]);
+  const timeline = useMemo(() => q.data ? buildTimeline(q.data.anomalies, q.data.reviews.filter((r) => r.step !== "ask"), q.data.actions, q.data.audit, q.data.turns) : [], [q.data]);
   if (q.isLoading) return <Loading what="incident" />;
   if (q.error || !q.data) return <ErrorBox error={q.error} />;
   const { incident: i } = q.data;
   const host = q.data.host ?? hosts.data?.find((h) => h.id === i.host_id) ?? null;
+  // the final ai_review's verification text, else its summary
+  const finalOut = [...q.data.reviews].reverse().find((r) => r.step === "final")?.output as (AiOutput & { verification?: string }) | undefined;
+  const verification = finalOut?.verification ?? finalOut?.rationale ?? i.ai_summary;
   const closed = i.status === "closed_benign" || i.status === "closed_tp";
   return (
     <>
@@ -36,6 +40,16 @@ export function IncidentDetail() {
         <span>opened {fmtTime(i.created_at)}</span>
         <AttackTags tags={i.attack_tags} />
       </div>
+      {i.status === "resolved" && (
+        <section className="card mb-4 flex flex-wrap items-start justify-between gap-4 p-5" style={{ borderColor: "color-mix(in srgb, var(--ok) 40%, var(--border))" }}>
+          <div className="min-w-0 max-w-3xl">
+            <h2 className="text-[15px] font-medium text-ok">Resolved by the AI analyst, containment verified</h2>
+            {verification && <p className="mt-1 whitespace-pre-wrap">{verification}</p>}
+            <p className="label mt-2">A human confirms the verdict to close this incident.</p>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => setPending("true_positive")}>Confirm true positive</button>
+        </section>
+      )}
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Card title="AI summary">{i.ai_summary ? <p className="whitespace-pre-wrap">{i.ai_summary}</p> : <Empty>No summary yet.</Empty>}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApprovals, useApprove, useReject } from "../api/hooks";
 import type { Approval, JsonObject } from "../api/types";
-import { SeverityBadge } from "../components/badges";
+import { Pill, SeverityBadge } from "../components/badges";
 import { CodeEditor } from "../components/CodeEditor";
 import { ConfirmDialog, Empty, ErrorBox, Field, HostLink, IncidentLink, KV, Loading, PageHeader } from "../components/ui";
 import { TTL_ACTIONS, actionSpec, describeAction, validateParams } from "../lib/actions";
@@ -63,6 +63,13 @@ function ApprovalCard({ a }: { a: Approval }) {
         {a.incident && <SeverityBadge severity={a.incident.severity} />}
       </div>
       <p className="mt-4 max-w-3xl whitespace-pre-wrap leading-relaxed">{a.rationale ?? "No rationale provided."}</p>
+      {a.critic && (
+        <div className="mt-4 max-w-3xl rounded-lg border border-line bg-bg p-3">
+          <div className="flex items-center gap-2"><span className="label">Second-opinion review</span><Pill color={a.critic.decision === "submit" ? "var(--ok)" : "var(--sev-medium)"}>{a.critic.decision === "submit" ? "Supports the action" : "Asked for revision"}</Pill></div>
+          {a.critic.concerns.length > 0 && <><p className="mt-2 font-medium">Concerns</p><ul className="list-disc pl-5">{a.critic.concerns.map((c, k) => <li key={k}>{c}</li>)}</ul></>}
+          {a.critic.missing_checks.length > 0 && <><p className="mt-2 font-medium">Missing checks</p><ul className="list-disc pl-5">{a.critic.missing_checks.map((c, k) => <li key={k} className="mono">{c}</li>)}</ul></>}
+        </div>
+      )}
       <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-3">
         <div><dt className="label">Host</dt><dd className="mt-0.5"><HostLink id={a.host_id} name={hostname} /></dd></div>
         <div><dt className="label">Incident</dt><dd className="mt-0.5 truncate">{a.incident ? <IncidentLink id={a.incident.id} label={a.incident.title} /> : a.incident_id ? <IncidentLink id={a.incident_id} /> : "None"}</dd></div>

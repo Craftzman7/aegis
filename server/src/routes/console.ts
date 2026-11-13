@@ -182,13 +182,14 @@ api.get("/incidents/:id", async (c) => {
   const incident = await getIncident(c.env, id);
   if (!incident) return c.json({ error: "not found" }, 404);
   const db = c.env.DB;
-  const [an, rev, act, aud] = await Promise.all([
+  const [an, rev, act, aud, turns] = await Promise.all([
     db.prepare("SELECT * FROM anomalies WHERE incident_id=? ORDER BY ts").bind(id).all<AnomalyRow>(),
     db.prepare("SELECT * FROM ai_reviews WHERE incident_id=? ORDER BY ts").bind(id).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM actions WHERE incident_id=? ORDER BY created_at").bind(id).all<ActionRow>(),
     db.prepare("SELECT * FROM audit_log WHERE incident_id=? ORDER BY id").bind(id).all<Record<string, unknown>>(),
+    db.prepare("SELECT * FROM agent_turns WHERE incident_id=? ORDER BY run_id, seq").bind(id).all<Record<string, unknown>>(),
   ]);
-  return c.json({ incident: parseRow(incident as unknown as Record<string, unknown>), anomalies: parseRows(an.results), reviews: parseRows(rev.results), actions: parseRows(act.results), audit: parseRows(aud.results) });
+  return c.json({ incident: parseRow(incident as unknown as Record<string, unknown>), anomalies: parseRows(an.results), reviews: parseRows(rev.results), actions: parseRows(act.results), audit: parseRows(aud.results), turns: parseRows(turns.results) });
 });
 
 api.post("/incidents/:id/verdict", async (c) => {

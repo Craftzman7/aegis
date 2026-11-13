@@ -31,6 +31,7 @@ export function describeLive(m: LiveMessage): string {
     case "ai_review": return `AI ${s("step")} review on incident ${short(s("incident_id"))}`;
     case "action": return `action ${s("action")} -> ${s("state")} (${s("proposed_by")})`;
     case "host": return `host ${s("hostname") || short(s("id"))} ${s("status")}`;
+    case "agent_turn": return `AI ${s("role")} turn${s("tool_name") ? ` (${s("tool_name")})` : ""} on incident ${short(s("incident_id"))}`;
     case "audit": return `audit ${s("event")} by ${s("actor")}`;
     case "policy": return `policy v${String(d.version ?? "?")} for ${short(s("host_id"))} by ${s("created_by")}`;
   }
@@ -68,6 +69,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       case "ai_review": if (incId) inv(qk.incident(incId)); break;
       case "action": inv(qk.approvals); inv(qk.overview); if (incId) inv(qk.incident(incId)); if (hostId) inv(qk.host(hostId)); break;
       case "host": inv(qk.hosts); inv(qk.overview); if (hostId) inv(qk.host(hostId)); break;
+      case "agent_turn": if (incId) inv(qk.incident(incId)); break;
       case "audit": inv(qk.audit); break;
       case "policy": inv(["policies"]); if (hostId) inv(qk.host(hostId)); break;
     }

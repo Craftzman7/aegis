@@ -1,5 +1,5 @@
 import type { LiveMessage } from "../api/types";
-import { ANOMALIES, HOSTS } from "./fixtures";
+import { ANOMALIES, HOSTS, TURNS } from "./fixtures";
 
 type Handler = (m: LiveMessage) => void;
 const SAMPLES = [
@@ -24,6 +24,9 @@ export function subscribeMockFeed(handler: Handler): () => void {
       handler({ type: "host", ts, data: { id: host.id, hostname: host.hostname, status: host.status } });
     } else if (roll < 0.9) {
       handler({ type: "audit", ts, data: { id: n, actor: "agent:" + host.hostname, event: "heartbeat.ok" } });
+    } else if (roll < 0.95) {
+      const turn = TURNS[n % TURNS.length];
+      handler({ type: "agent_turn", ts, data: { ...turn, ts } });
     } else {
       handler({ type: "ai_review", ts, data: { id: `rv-live-${n}`, incident_id: ANOMALIES[0].incident_id, step: "reanalyze" } });
     }

@@ -23,14 +23,15 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 const stateColors: Record<string, string> = {
   proposed: "var(--sev-medium)", approved: "var(--sev-low)", dispatched: "var(--sev-low)", succeeded: "var(--ok)",
   failed: "var(--sev-critical)", rejected: "var(--sev-high)", rolled_back: "var(--sev-info)", expired: "var(--sev-info)",
-  open: "var(--sev-high)", investigating: "var(--sev-low)", awaiting_approval: "var(--sev-medium)", contained: "var(--ok)",
+  open: "var(--sev-high)", investigating: "var(--sev-low)", awaiting_approval: "var(--sev-medium)", contained: "var(--ok)", resolved: "var(--ok)",
   closed_benign: "var(--sev-info)", closed_tp: "var(--ok)",
   ok: "var(--ok)", degraded: "var(--sev-medium)", isolated: "var(--sev-critical)", offline: "var(--sev-info)",
   active: "var(--ok)", shadow: "var(--sev-medium)", disabled: "var(--sev-info)",
   autonomous: "var(--ok)", propose_only: "var(--sev-medium)", paused: "var(--sev-critical)",
 };
 export function StateBadge({ state }: { state: ActionState | IncidentStatus | string }) {
-  return <Pill color={stateColors[state] ?? "var(--sev-info)"}>{state.replace(/_/g, " ")}</Pill>;
+  // resolved shares the ok colour with contained; the dot tells them apart
+  return <Pill dot={state === "resolved"} color={stateColors[state] ?? "var(--sev-info)"}>{state.replace(/_/g, " ")}</Pill>;
 }
 
 const verdictColors: Record<Verdict, string> = {
