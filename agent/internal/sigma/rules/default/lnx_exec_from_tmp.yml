@@ -1,0 +1,25 @@
+title: Execution of Binary from Temporary or Shared-Memory Directory
+id: c70d2d80-ad15-4ab4-aab0-fbbba40bccf6
+status: stable
+description: Detects a process whose image resides in /tmp, /var/tmp or /dev/shm, a staging location commonly used by malware.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.execution
+    - attack.t1204.002
+    - attack.defense_evasion
+    - attack.t1036
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection:
+        Image|startswith:
+            - '/tmp/'
+            - '/var/tmp/'
+            - '/dev/shm/'
+    condition: selection
+falsepositives:
+    - Software installers and test harnesses that unpack and run helpers from /tmp
+    - Build systems executing generated binaries
+level: medium

@@ -1,0 +1,21 @@
+title: Download and Pipe to Shell via curl or wget
+id: d3682239-f78e-4706-a836-3e71325f6eec
+status: stable
+description: Detects curl or wget output piped straight into a shell interpreter, a common dropper and install-script pattern.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.execution
+    - attack.t1059.004
+    - attack.command_and_control
+    - attack.t1105
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection:
+        CommandLine|re: '(curl|wget)\s.*\|\s*(sudo\s+)?(/(usr/)?bin/)?(ba|da|z|k)?sh(\s|[''"]|$)'
+    condition: selection
+falsepositives:
+    - Legitimate vendor install scripts (rustup, nvm, docker convenience script)
+level: high

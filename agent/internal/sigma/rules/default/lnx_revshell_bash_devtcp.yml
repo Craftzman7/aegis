@@ -1,0 +1,29 @@
+title: Reverse Shell via Bash /dev/tcp Redirection
+id: 8ff84061-3031-4ce9-9879-9e4ef91d2b51
+status: stable
+description: Detects a shell using the /dev/tcp or /dev/udp pseudo-device together with a file-descriptor redirection, the classic bash reverse shell.
+references:
+    - https://attack.mitre.org/techniques/T1059/004/
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.execution
+    - attack.t1059.004
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection_dev:
+        CommandLine|contains:
+            - '/dev/tcp/'
+            - '/dev/udp/'
+    selection_redirect:
+        CommandLine|contains:
+            - '>&'
+            - '0<&'
+            - '<>'
+            - 'exec '
+    condition: selection_dev and selection_redirect
+falsepositives:
+    - Administrative health-check scripts that probe ports through /dev/tcp
+level: high

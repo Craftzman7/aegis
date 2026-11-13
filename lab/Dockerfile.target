@@ -1,0 +1,44 @@
+# LAB ONLY. Ubuntu 24.04 target for the Aegis test lab.
+# Do NOT use outside the lab: it runs sshd with password login and a user with a
+# known password (alice:alice).
+#
+# No systemd. lab/entrypoint.sh starts sshd, cron, rsyslog and (best effort) auditd,
+# enrolls the agent once, then execs the agent.
+#
+# The agent binary is NOT baked into the image. docker-compose.yml bind-mounts
+# ../agent/bin/aegis-agent-linux-<arch> read-only at /usr/local/bin/aegis-agent,
+# so rebuilding the agent does not require rebuilding this image.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      openssh-server openssh-client sudo cron nftables auditd iproute2 procps \
+      netcat-openbsd curl python3 rsyslog ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# LAB ONLY: well-known test credentials. alice is in the sudo group so the lab can
+# model a user account being used for privilege escalation. Never reuse this password.
+RUN useradd -m -s /bin/bash alice \
+ && echo 'alice:alice' | chpasswd \
+ && usermod -aG sudo alice
+
+# LAB ONLY: password logins on, so 01-ssh-bruteforce.sh has something to hit.
+RUN mkdir -p /run/sshd /var/lib/aegis /etc/aegis /root/.ssh \
+ && printf '%s\n' \
+      '# LAB ONLY: password auth on so the attack simulations can run.' \
+      'PasswordAuthentication yes' \
+      'KbdInteractiveAuthentication yes' \
+      'PermitRootLogin prohibit-password' \
+      > /etc/ssh/sshd_config.d/99-aegis-lab.conf \
+ && chmod 700 /root/.ssh \
+ && touch /root/.ssh/authorized_keys \
+ && chmod 600 /root/.ssh/authorized_keys
+
+COPY entrypoint.sh /usr/local/bin/lab-entrypoint.sh
+RUN chmod 755 /usr/local/bin/lab-entrypoint.sh
+
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/lab-entrypoint.sh"]

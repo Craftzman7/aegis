@@ -1,0 +1,21 @@
+title: Base64-Decoded Payload Piped to Shell
+id: b2974d95-47ed-4453-97e3-f915b3def322
+status: stable
+description: Detects base64 decoding whose output is piped into a shell, an obfuscation technique for delivering commands.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.defense_evasion
+    - attack.t1027
+    - attack.execution
+    - attack.t1059.004
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection:
+        CommandLine|re: 'base64\s+(-d|-D|--decode).*\|\s*(sudo\s+)?(/(usr/)?bin/)?(ba|da|z|k)?sh(\s|[''"]|$)'
+    condition: selection
+falsepositives:
+    - Rare administrative scripts that decode and execute embedded payloads
+level: high

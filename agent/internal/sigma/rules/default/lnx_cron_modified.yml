@@ -1,0 +1,29 @@
+title: Cron Job or Crontab File Modified
+id: 86070714-d9cf-488a-951a-18c66c9cf8a4
+status: stable
+description: Detects modification of system or user crontabs and cron drop-in directories, used for scheduled-task persistence.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.persistence
+    - attack.execution
+    - attack.t1053.003
+logsource:
+    product: linux
+    category: file_event
+detection:
+    selection_dirs:
+        TargetFilename|startswith:
+            - '/var/spool/cron/'
+            - '/etc/cron.d/'
+            - '/etc/cron.hourly/'
+            - '/etc/cron.daily/'
+            - '/etc/cron.weekly/'
+            - '/etc/cron.monthly/'
+    selection_file:
+        TargetFilename: '/etc/crontab'
+    condition: 1 of selection_*
+falsepositives:
+    - Package installation adding maintenance jobs
+    - Configuration management
+level: medium

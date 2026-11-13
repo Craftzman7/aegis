@@ -1,0 +1,29 @@
+title: Shell History Clearing or Disabling
+id: 04833e9a-8abb-4aa3-b0d0-ea9e6fbe783d
+status: stable
+description: Detects commands that clear, truncate, or disable shell history to hide activity.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.defense_evasion
+    - attack.t1070.003
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection:
+        CommandLine|contains:
+            - 'history -c'
+            - 'history -w /dev/null'
+            - 'unset HISTFILE'
+            - 'HISTFILESIZE=0'
+            - 'HISTSIZE=0'
+            - 'rm .bash_history'
+            - 'rm ~/.bash_history'
+            - '.bash_history -> /dev/null'
+            - 'ln -sf /dev/null ~/.bash_history'
+            - 'ln -sf /dev/null /root/.bash_history'
+    condition: selection
+falsepositives:
+    - Users deliberately clearing their own history
+level: medium

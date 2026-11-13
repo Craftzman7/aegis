@@ -1,0 +1,60 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aegis",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  },
+  "assets": {
+    "directory": "../dashboard/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*", "/console/*", "/install.sh", "/releases/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "aegis",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "EVIDENCE", "bucket_name": "aegis-evidence" }],
+  "queues": {
+    "producers": [{ "binding": "TRIAGE", "queue": "aegis-triage" }],
+    "consumers": [
+      {
+        "queue": "aegis-triage",
+        "max_batch_size": 10,
+        "max_batch_timeout": 2,
+        "max_retries": 5,
+        "dead_letter_queue": "aegis-triage-dlq"
+      }
+    ]
+  },
+  "workflows": [
+    { "name": "aegis-investigation", "binding": "INVESTIGATION", "class_name": "InvestigationWorkflow" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "HOST", "class_name": "HostDO" },
+      { "name": "FLEET", "class_name": "FleetDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostDO", "FleetDO"] }],
+  "ai": { "binding": "AI" },
+  "vectorize": [{ "binding": "MEMORY", "index_name": "aegis-memory" }],
+  "triggers": { "crons": ["0 * * * *", "0 6 * * *"] },
+  "secrets": { "required": ["SIGNING_KEY_JWK"] },
+  "vars": {
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_GATEWAY_ID": "aegis",
+    "DEV_MODE": "false",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  }
+}

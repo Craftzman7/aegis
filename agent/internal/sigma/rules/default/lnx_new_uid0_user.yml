@@ -1,0 +1,26 @@
+title: Local Account Created or Modified With UID 0
+id: e5275bd0-1a82-4b6a-9344-ba6bc09327be
+status: stable
+description: Detects useradd or usermod invoked with UID 0, creating a second superuser account (often with -o to allow a duplicate UID).
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.persistence
+    - attack.t1136.001
+    - attack.privilege_escalation
+    - attack.t1078.003
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection_img:
+        Image|endswith:
+            - '/useradd'
+            - '/usermod'
+            - '/adduser'
+    selection_uid:
+        CommandLine|re: '\s(-u|--uid)[\s=]0(\s|$)'
+    condition: selection_img and selection_uid
+falsepositives:
+    - None expected on a managed system
+level: critical

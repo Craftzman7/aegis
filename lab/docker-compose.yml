@@ -1,0 +1,83 @@
+# Aegis test lab. LAB ONLY: targets run privileged with known credentials.
+#
+# From the repo root:
+#   make -C agent build-linux-arm64          # Apple Silicon (build-linux-amd64 on Intel)
+#   AEGIS_ARCH=arm64 \
+#   AEGIS_TOKEN_TARGET1=<token> AEGIS_TOKEN_TARGET2=<token> \
+#     docker compose -f lab/docker-compose.yml up -d --build
+# See lab/README.md for the full walkthrough.
+
+services:
+  target1:
+    build:
+      context: .
+      dockerfile: Dockerfile.target
+    hostname: target1
+    init: true                        # tini as PID 1 reaps zombies from sshd/cron children
+    # pid: host is intentionally NOT set. The agent sees only this container's processes.
+    privileged: true                  # nftables/auditd need host-level access under Docker Desktop
+    cap_add:
+      - NET_ADMIN                     # nftables (block_ip, isolate_host)
+      - AUDIT_CONTROL                 # auditd rules
+      - AUDIT_READ                    # auditd log reads
+    environment:
+      AEGIS_SERVER: ${AEGIS_SERVER:-http://host.docker.internal:8787}
+      AEGIS_TOKEN: ${AEGIS_TOKEN_TARGET1:-}
+    volumes:
+      # Agent binary, read-only, from the host build output. create_host_path: false stops
+      # Docker from silently creating a directory if the binary has not been built.
+      - type: bind
+        source: ../agent/bin/aegis-agent-linux-${AEGIS_ARCH:-arm64}
+        target: /usr/local/bin/aegis-agent
+        read_only: true
+        bind:
+          create_host_path: false
+      # Keeps the agent key across container restarts, so enrollment is one-time.
+      - target1-state:/var/lib/aegis
+    ports:
+      - "127.0.0.1:2201:22"           # optional manual ssh: ssh alice@127.0.0.1 -p 2201
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  target2:
+    build:
+      context: .
+      dockerfile: Dockerfile.target
+    hostname: target2
+    init: true
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - AUDIT_CONTROL
+      - AUDIT_READ
+    environment:
+      AEGIS_SERVER: ${AEGIS_SERVER:-http://host.docker.internal:8787}
+      AEGIS_TOKEN: ${AEGIS_TOKEN_TARGET2:-}
+    volumes:
+      - type: bind
+        source: ../agent/bin/aegis-agent-linux-${AEGIS_ARCH:-arm64}
+        target: /usr/local/bin/aegis-agent
+        read_only: true
+        bind:
+          create_host_path: false
+      - target2-state:/var/lib/aegis
+    ports:
+      - "127.0.0.1:2202:22"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  attacker:
+    build:
+      context: .
+      dockerfile: Dockerfile.attacker
+    hostname: attacker
+    init: true
+    command: ["sleep", "infinity"]    # attacks are run with `docker compose exec`
+    environment:
+      AEGIS_SERVER: ${AEGIS_SERVER:-http://host.docker.internal:8787}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  target1-state:
+  target2-state:

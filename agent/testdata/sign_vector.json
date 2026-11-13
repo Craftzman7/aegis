@@ -1,0 +1,14 @@
+{
+  "comment": "Ed25519 is deterministic: same seed + inputs must yield identical signatures. canonical = METHOD\\nPATH\\nTS\\nhex(sha256(body)).",
+  "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "public_key_b64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "method": "POST",
+  "path": "/v1/events",
+  "ts": 1767225600,
+  "body": "{\"anomalies\":[]}",
+  "canonical": "POST\n/v1/events\n1767225600\ne7be27ea00ff535ffe654a9cc8635d4a44d09025640a916667a06eacad4534be",
+  "signature_b64": "8R5hiup4HrbHr5Mcn2sGKRU+lgUtEm5mKb/K1jjcT02A0vJexkhONEL79LbrljOlfUkNuKFiSpMW+Z8EYGdtBw==",
+  "envelope_payload_json": "{\"id\":\"11111111-1111-4111-8111-111111111111\",\"host_id\":\"host-1\",\"action\":\"collect_evidence\",\"params\":{\"kind\":\"user_info\",\"target\":\"alice\"},\"issued_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:05:00Z\"}",
+  "envelope_payload_b64": "eyJpZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImhvc3RfaWQiOiJob3N0LTEiLCJhY3Rpb24iOiJjb2xsZWN0X2V2aWRlbmNlIiwicGFyYW1zIjp7ImtpbmQiOiJ1c2VyX2luZm8iLCJ0YXJnZXQiOiJhbGljZSJ9LCJpc3N1ZWRfYXQiOiIyMDI2LTAxLTAxVDAwOjAwOjAwWiIsImV4cGlyZXNfYXQiOiIyMDI2LTAxLTAxVDAwOjA1OjAwWiJ9",
+  "envelope_sig_b64": "zxRAjSq/h6FNj4Zy9LwOcHQl41/CawCGVgKGOsLLAF9OdPqHQvphjGRR9Nmjc7cH8XGE3MUegVlGWNBiz/eNBg=="
+}

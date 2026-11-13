@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel2: #eef0f4; --border: #d6dae1;
+  --fg: #151922; --muted: #5d6676; --accent: #0b6bcb;
+  --sev-critical: #d92d3a; --sev-high: #e8590c; --sev-medium: #c98a00; --sev-low: #2b78d6; --sev-info: #6b7280;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0f14; --panel: #141922; --panel2: #1b222d; --border: #2a3340;
+    --fg: #e4e8ee; --muted: #8b95a5; --accent: #4da3ff;
+    --sev-critical: #ff5a64; --sev-high: #ff8a3d; --sev-medium: #f2b83a; --sev-low: #5aa2ff; --sev-info: #98a1b0;
+  }
+}
+@theme inline {
+  --color-bg: var(--bg); --color-panel: var(--panel); --color-panel2: var(--panel2);
+  --color-line: var(--border); --color-fg: var(--fg); --color-muted: var(--muted); --color-accent: var(--accent);
+  --color-sev-critical: var(--sev-critical); --color-sev-high: var(--sev-high);
+  --color-sev-medium: var(--sev-medium); --color-sev-low: var(--sev-low); --color-sev-info: var(--sev-info);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-size: 13px; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .7rem; border-radius: .375rem; border: 1px solid var(--border); background: var(--panel2); color: var(--fg); font-weight: 500; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-danger { background: var(--sev-critical); border-color: var(--sev-critical); color: #fff; }
+.input { background: var(--bg); border: 1px solid var(--border); border-radius: .375rem; padding: .3rem .5rem; color: var(--fg); min-width: 0; }
+.input:focus { border-color: var(--accent); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: .5rem; }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: .4rem .6rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tbl td { padding: .45rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl tbody tr:hover { background: var(--panel2); }
+.mono { font-family: var(--font-mono); font-size: 12px; }

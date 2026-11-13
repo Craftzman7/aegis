@@ -1,0 +1,36 @@
+[Unit]
+Description=Aegis security agent
+Documentation=https://github.com/aegis-soc/aegis
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/aegis-agent run --config /etc/aegis/agent.yaml
+Restart=always
+RestartSec=5
+User=root
+# The agent needs root for netlink audit, nftables, usermod, kill and reading
+# /proc of all processes, so hardening focuses on what it does NOT need.
+NoNewPrivileges=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+CapabilityBoundingSet=CAP_AUDIT_CONTROL CAP_AUDIT_READ CAP_AUDIT_WRITE CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SETUID CAP_SETGID
+# Deliberately NOT set: ProtectSystem/ProtectHome/PrivateTmp. usermod writes /etc/shadow,
+# quarantine_file moves files from anywhere (including /tmp, /home), and FIM/evidence
+# collection must see the real host filesystem.
+StateDirectory=aegis
+StateDirectoryMode=0700
+LimitNOFILE=4096
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

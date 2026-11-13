@@ -1,0 +1,4 @@
+# Copy to .dev.vars. Generate the key with: node scripts/gen-signing-key.mjs
+SIGNING_KEY_JWK='{"kty":"OKP","crv":"Ed25519","d":"...","x":"..."}'
+# Local-only overrides of wrangler.jsonc vars (DEV_MODE=true skips Cloudflare Access; NEVER set in production)
+DEV_MODE=true

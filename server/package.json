@@ -1,0 +1,28 @@
+{
+  "name": "aegis-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types --strict-vars=false",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate:local": "wrangler d1 migrations apply aegis --local"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "hono": "^4.13.18",
+    "jose": "^6.2.17",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.1",
+    "@cloudflare/workers-types": "^5.20261112.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.161.0"
+  }
+}

