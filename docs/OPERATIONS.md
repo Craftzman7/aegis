@@ -70,7 +70,7 @@ Mark false positives in the dashboard rather than in SQL. Verdicts update rule s
 ## Agent loop
 
 - **Modes:** `AGENT_MODE=loop` (the default) runs the tool-calling investigation. To roll back, set `AGENT_MODE=rounds` in `server/wrangler.jsonc` and redeploy.
-- **Budgets:** 30 tool calls, 20 turns and 20 minutes. Waiting for your approval doesn't count toward the time limit. When approvals come back, the agent gets another 10 calls and 5 turns to verify the containment.
+- **Budgets:** 30 tool calls, 20 turns and 20 minutes. Waiting for your approval doesn't count toward the time limit. When approvals come back, the agent gets another 10 calls and 5 turns to verify the containment. If it runs out of budget without ever waiting, but you've already decided a proposal, it's told the outcome and gets that allowance once.
 - **`resolved`:** containment is verified and the incident waits for your **Confirm true positive**.
 - **Second-opinion review:** notes appear on the approval card and in `actions.critic_json`. "review unavailable" means the review call failed and the proposal went through without it.
 

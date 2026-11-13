@@ -210,6 +210,29 @@ describe("verification allowance", () => {
   });
 });
 
+describe("late approval", () => {
+  it("out of budget with an approval the agent never waited for: it is told, gets room to verify, and resolves", async () => {
+    const path = "/etc/cron.d/evil";
+    const sweep = (k: number) => ({ choices: [{ message: { content: null, tool_calls: Array.from({ length: 7 }, (_, j) => ({ id: `s${k}_${j}`, type: "function", function: { name: "host_timeline", arguments: "{}" } })) } }] });
+    let m!: S;
+    m = await setup(
+      [
+        sweep(0), sweep(1), sweep(2), sweep(3), // 28
+        tc("propose_action", { action: "quarantine_file", params: { path }, reason: "malicious cron persistence" }, "p"), // 29
+        async () => { await approveAll(m); await postResults(m); return tc("host_timeline", {}, "t"); }, // 30: human approves meanwhile; agent never waits
+        (i: In) => {
+          const msgs = i.messages as { role: string; content: string }[];
+          expect(msgs.some((x) => x.role === "user" && x.content.includes("A human already decided your proposals"))).toBe(true);
+          return tc("collect_evidence", { kind: "file_hash", target: path }, "v");
+        },
+        tc("finish", { ...FIN, verified: true, verification: "file_hash after quarantine: no such file" }, "f"),
+      ],
+      [{ decision: "submit", missing_checks: [], concerns: [] }],
+    );
+    expect((await runWf(m, autoStep(m))).status).toBe("resolved");
+  });
+});
+
 describe("flow: evidence -> propose -> critic -> human approval -> verify -> resolved", () => {
   it("scripted agent resolves the incident", async () => {
     const path = "/etc/cron.d/evil";

@@ -2,7 +2,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { AGENT_SYSTEM_PROMPT, analyze, AnalystError, buildUserPrompt, type AnalystOutput } from "../ai/analyst";
 import { loadContext } from "../ai/context";
 import { extractAssistantText, parseToolCalls, runChat, type ParsedToolCall } from "../ai/runner";
-import { actionState, completeWait, isTerminal, pendingApprovedIds, runTool, toolSpecs, type ToolOutcome, type WaitSpec } from "../ai/tools";
+import { actionState, completeWait, isTerminal, pendingApprovedIds, proposalOutcomes, runTool, toolSpecs, type ToolOutcome, type WaitSpec } from "../ai/tools";
 import { getTurn, injectSeq, insertTurn, loadTurns, MAX_CALLS_PER_TURN, toMessages, turnBase } from "../ai/transcript";
 import { rememberIncident } from "../ai/memory";
 import { recordReview } from "../lib/reviews";
@@ -230,10 +230,10 @@ export interface TurnResult {
   calls: ParsedToolCall[];
 }
 
-export async function turnStep(env: Env, incidentId: string, runId: string, n: number, opts: { inject: "nudge" | "budget" | null; force: boolean }): Promise<TurnResult> {
+export async function turnStep(env: Env, incidentId: string, runId: string, n: number, opts: { inject: "nudge" | "budget" | { text: string } | null; force: boolean }): Promise<TurnResult> {
   const inc = await getIncident(env, incidentId);
   if (!inc || isClosed(inc.status) || (await getAutonomy(env, inc.host_id)) === "paused") return { skipped: true, now: Date.now(), calls: [] };
-  if (opts.inject) await insertTurn(env, { incident_id: incidentId, run_id: runId, seq: injectSeq(n), role: "user", content: { text: opts.inject === "budget" ? BUDGET_TEXT : NUDGE_TEXT } });
+  if (opts.inject) await insertTurn(env, { incident_id: incidentId, run_id: runId, seq: injectSeq(n), role: "user", content: { text: typeof opts.inject === "object" ? opts.inject.text : opts.inject === "budget" ? BUDGET_TEXT : NUDGE_TEXT } });
   if (!(await getTurn(env, runId, turnBase(n)))) {
     const messages = toMessages(await loadTurns(env, runId));
     const raw = await runChat(env, messages, {
@@ -366,13 +366,25 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
       let maxCalls = MAX_TOOL_CALLS;
       let maxTurns = MAX_TURNS;
       let noTool = 0;
+      let approvalsSeen = false; // the agent learned approval outcomes via wait_for_approvals
       let forced = false;
       let forcedTurns = 0;
       let finished = false;
       for (; !finished; n++) {
+        let late: { text: string } | null = null;
+        if (!forced && !approvalsSeen && (toolCalls >= maxCalls || n >= maxTurns)) {
+          // Out of budget, but a human already decided a proposal the agent never waited for: tell it, and allow verification once.
+          const decided = await step.do(`late-approvals:${n}`, DB_STEP_CFG, () => proposalOutcomes(this.env, id, new Date(init.startedAt).toISOString()) as Promise<never>) as unknown[];
+          if (decided.length) {
+            approvalsSeen = true;
+            maxCalls = toolCalls + VERIFY_TOOL_CALLS;
+            maxTurns = n + VERIFY_TURNS;
+            late = { text: `A human already decided your proposals: ${truncate(JSON.stringify(decided), 3000)}. Verify any containment that succeeded with tools, then call finish.` };
+          }
+        }
         const budget = forced || toolCalls >= maxCalls || n >= maxTurns || lastNow - init.startedAt - approvalWait > LOOP_WALL_MS;
         const force = budget || noTool >= 2;
-        const inject = budget && !forced ? ("budget" as const) : noTool === 1 && !force ? ("nudge" as const) : null;
+        const inject = late ?? (budget && !forced ? ("budget" as const) : noTool === 1 && !force ? ("nudge" as const) : null);
         if (force) {
           forced = true;
           if (++forcedTurns > 2) break; // the model will not finish: finalize with the last known verdict
@@ -401,6 +413,7 @@ export class InvestigationWorkflow extends WorkflowEntrypoint<Env, Investigation
               const t1 = await step.do(`appr-end:${tag}`, DB_STEP_CFG, async () => Date.now());
               approvalWait += t1 - t0;
               lastNow = t1;
+              approvalsSeen = true;
               maxCalls = Math.max(maxCalls, toolCalls + VERIFY_TOOL_CALLS);
               maxTurns = Math.max(maxTurns, n + 1 + VERIFY_TURNS);
               const ids = await step.do(`appr-dispatched:${tag}`, DB_STEP_CFG, () => pendingApprovedIds(this.env, id));

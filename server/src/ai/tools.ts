@@ -108,7 +108,8 @@ async function proposeTier1(ctx: ToolCtx, id: string, action: string, params: Re
   const prior = await env.DB.prepare("SELECT 1 AS x FROM audit_log WHERE incident_id=? AND event='critic.revise' AND detail_json LIKE ? LIMIT 1").bind(ctx.incidentId, `%"key":"${key}"%`).first();
   const anomalies = (await env.DB.prepare("SELECT * FROM anomalies WHERE incident_id=? ORDER BY ts LIMIT 10").bind(ctx.incidentId).all<AnomalyRow>()).results;
   const toolRows = (await env.DB.prepare("SELECT tool_name, content_json FROM agent_turns WHERE run_id=? AND role='tool' ORDER BY seq").bind(ctx.runId).all<{ tool_name: string; content_json: string }>()).results;
-  const toolsRun = toolRows.map((t) => ({ tool: t.tool_name, summary: truncate(t.content_json, 400) }));
+  // Drop base64 copies so the readable text (e.g. a sampled file) fits; 400 chars cut it off and the critic thought nothing was sampled.
+  const toolsRun = toolRows.map((t) => ({ tool: t.tool_name, summary: truncate(t.content_json.replace(/"base64":"[^"]*",?/g, ""), 1200) }));
   const notes = await critique(env, { proposal: { action, params, reason }, anomalies, toolsRun }, prior ? 1 : 0);
   if (notes.decision === "revise" && !prior) {
     await audit(env, { actor: "ai", event: "critic.revise", incident_id: ctx.incidentId, host_id: ctx.hostId, detail: { key, action, missing_checks: notes.missing_checks, concerns: notes.concerns } });
@@ -129,10 +130,11 @@ export async function pendingApprovedIds(env: Env, incidentId: string): Promise<
   return (await env.DB.prepare("SELECT id FROM actions WHERE incident_id=? AND proposed_by='ai' AND tier=1 AND state='dispatched' ORDER BY created_at").bind(incidentId).all<{ id: string }>()).results.map((r) => r.id);
 }
 
-export async function proposalOutcomes(env: Env, incidentId: string): Promise<unknown[]> {
+export async function proposalOutcomes(env: Env, incidentId: string, decidedSinceIso?: string): Promise<unknown[]> {
   const rows = (await env.DB.prepare(
-    "SELECT * FROM actions WHERE incident_id=? AND proposed_by='ai' AND tier=1 AND NOT (state='rejected' AND approved_by IS NULL) ORDER BY created_at",
-  ).bind(incidentId).all<ActionRow>()).results;
+    "SELECT * FROM actions WHERE incident_id=? AND proposed_by='ai' AND tier=1 AND NOT (state='rejected' AND approved_by IS NULL)" +
+      (decidedSinceIso ? " AND state!='proposed' AND created_at>=?" : "") + " ORDER BY created_at",
+  ).bind(...(decidedSinceIso ? [incidentId, decidedSinceIso] : [incidentId])).all<ActionRow>()).results;
   return rows.map((a) => ({ action_id: a.id, action: a.action, params: safeJson(a.params_json, {}), state: a.state, approved_by: a.approved_by, reject_reason: a.reject_reason, result: safeJson(a.result_json, null), error: a.error }));
 }
 
