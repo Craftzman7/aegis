@@ -452,6 +452,12 @@ func (e *Executor) disableUser(ctx context.Context, cmd Command) (map[string]any
 
 var quarantineDenyPrefixes = []string{"/proc/", "/sys/", "/dev/", "/boot/"}
 
+func (e *Executor) expectChange(path, sha256 string) {
+	if e.cfg.ExpectChange != nil {
+		e.cfg.ExpectChange(path, sha256)
+	}
+}
+
 func (e *Executor) quarantineDir() string { return filepath.Join(e.cfg.DataDir, "quarantine") }
 
 func (e *Executor) quarantineFile(ctx context.Context, cmd Command) (map[string]any, string, error) {
@@ -487,6 +493,7 @@ func (e *Executor) quarantineFile(ctx context.Context, cmd Command) (map[string]
 		return nil, "", err
 	}
 	dest := filepath.Join(e.quarantineDir(), fmt.Sprintf("%s-%s.%d", sum[:16], filepath.Base(p.Path), e.cfg.Now().Unix()))
+	e.expectChange(p.Path, sum)
 	if err := moveFile(p.Path, dest); err != nil {
 		return nil, "", err
 	}
@@ -591,6 +598,7 @@ func (e *Executor) undo(ctx context.Context, rec RollbackRecord) error {
 		if err := os.Chmod(q, 0o600); err != nil {
 			return err
 		}
+		e.expectChange(orig, rec.Params["sha256"])
 		if err := moveFile(q, orig); err != nil {
 			return err
 		}

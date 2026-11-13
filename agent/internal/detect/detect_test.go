@@ -334,3 +334,29 @@ func evidenceSmall(m map[string]any) bool {
 	b, _ := json.Marshal(m)
 	return len(b) <= maxEvidenceBytes
 }
+
+func TestSelfInflictedFileChangeIgnored(t *testing.T) {
+	e := newTestEngine(t)
+	now := time.Unix(1_000_000, 0)
+	e.now = func() time.Time { return now }
+	cron := func(sha string) event.Event {
+		return event.Event{Kind: event.KindFileDeleted, TargetFilename: "/etc/cron.d/x", Sha256: sha,
+			Logsource: event.Logsource{Product: "linux", Category: event.CategoryFileEvent}}
+	}
+	ctx := context.Background()
+	e.ExpectChange("/etc/cron.d/x", "aa", 5*time.Minute)
+	e.Process(ctx, cron("aa"))
+	if as := drain(e); len(as) != 0 {
+		t.Fatalf("agent's own quarantine alerted: %+v", as)
+	}
+	e.Process(ctx, cron("bb")) // same path, different content: attacker, must alert
+	if len(drain(e)) == 0 {
+		t.Fatal("different content on an expected path was suppressed")
+	}
+	now = now.Add(6 * time.Minute)
+	e.dedup = map[string]time.Time{}
+	e.Process(ctx, cron("aa")) // window expired
+	if len(drain(e)) == 0 {
+		t.Fatal("expectation never expired")
+	}
+}

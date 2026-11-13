@@ -41,6 +41,7 @@ type env struct {
 	proc   string
 	killed []int
 	seq    int
+	expect []string // path+" "+sha256 passed to ExpectChange
 }
 
 func newEnv(t *testing.T) *env {
@@ -61,10 +62,11 @@ func newEnv(t *testing.T) *env {
 		Policy:   func() policy.Body { return policy.Body{ServerEndpoints: []string{"203.0.113.5"}} },
 		LocalIPs: func() []net.IP { return []net.IP{net.ParseIP("192.168.97.2")} },
 		ProcRoot: e.proc, PasswdPath: filepath.Join(dir, "passwd"), GroupPath: filepath.Join(dir, "group"), LogDir: filepath.Join(dir, "log"),
-		Now:      func() time.Time { return e.now },
-		Resolver: func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("198.51.100.20")}, nil },
-		Kill:     func(pid int) error { e.killed = append(e.killed, pid); return nil },
-		SelfPID:  4242, SelfUID: 999, SelfExe: filepath.Join(dir, "aegis-agent"),
+		Now:          func() time.Time { return e.now },
+		Resolver:     func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("198.51.100.20")}, nil },
+		Kill:         func(pid int) error { e.killed = append(e.killed, pid); return nil },
+		ExpectChange: func(path, sha string) { e.expect = append(e.expect, path+" "+sha) },
+		SelfPID:      4242, SelfUID: 999, SelfExe: filepath.Join(dir, "aegis-agent"),
 		Events: fakeEvents{{Time: e.now, Logsource: event.Logsource{Product: "linux", Category: "process_creation"}, Image: "/tmp/evil", CommandLine: "/tmp/evil"},
 			{Time: e.now, Logsource: event.Logsource{Product: "linux", Category: "process_creation"}, Image: "/bin/ls"}},
 	})
@@ -288,6 +290,10 @@ func TestQuarantineAndRollback(t *testing.T) {
 		t.Fatal("sha256")
 	}
 	e.want(e.do("rollback", map[string]any{"rollback_token": res.RollbackToken}), StatusSucceeded)
+	want := f + " " + res.Result["sha256"].(string)
+	if len(e.expect) != 2 || e.expect[0] != want || e.expect[1] != want {
+		t.Fatalf("quarantine and restore must announce the change to detection: %v", e.expect)
+	}
 	b, err := os.ReadFile(f)
 	if err != nil || string(b) != "malware" {
 		t.Fatalf("restore failed: %v", err)

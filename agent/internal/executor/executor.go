@@ -110,7 +110,10 @@ type Config struct {
 	Events      EventSource
 	Policy      func() policy.Body
 	SetLogLevel func(level string, ttl time.Duration)
-	Logger      *slog.Logger
+	// ExpectChange is told about file changes the executor makes (quarantine,
+	// restore) so detection does not alert on the agent's own actions.
+	ExpectChange func(path, sha256 string)
+	Logger       *slog.Logger
 
 	// Overridable environment (tests).
 	ProcRoot   string

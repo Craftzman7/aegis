@@ -80,6 +80,8 @@ func Run(ctx context.Context, cfg Config, version string) error {
 		HostID: id.HostID, ServerPub: pub, DataDir: cfg.DataDir, ServerURL: id.ServerURL,
 		Events: engine.Ring(), Logger: log,
 		Policy: func() policy.Body { return pm.Current().Body },
+		// FIM rescans every 15s; 5 minutes leaves room for a slow scan.
+		ExpectChange: func(path, sha256 string) { engine.ExpectChange(path, sha256, 5*time.Minute) },
 		SetLogLevel: func(level string, ttl time.Duration) {
 			levelMu.Lock()
 			defer levelMu.Unlock()

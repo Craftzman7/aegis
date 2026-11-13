@@ -55,6 +55,9 @@ type Engine struct {
 	dedup    map[string]time.Time
 	counters map[string]float64 // per-minute metric accumulators
 
+	selfMu sync.Mutex
+	self   map[string]time.Time // path+"\x00"+sha256 -> expiry: file changes made by the agent itself
+
 	nEvents, nAnomalies atomic.Int64
 	lastEv, lastAn      int64
 	lastStat            time.Time
@@ -71,6 +74,7 @@ func NewEngine(log *slog.Logger) *Engine {
 		baseline: NewBaseline(0.1, DefLearnSamples),
 		ssh:      NewSSHTracker(),
 		dedup:    map[string]time.Time{},
+		self:     map[string]time.Time{},
 		counters: map[string]float64{},
 		lastStat: time.Now(),
 	}
@@ -171,6 +175,9 @@ func (e *Engine) Process(ctx context.Context, ev event.Event) {
 	ev.Message = clip(ev.Message, 4096)
 	e.nEvents.Add(1)
 	e.ring.Add(ev)
+	if e.selfInflicted(&ev) {
+		return // the agent's own quarantine/restore; still in the ring for test_rule
+	}
 
 	e.mu.RLock()
 	rules, body := e.rules, e.body
@@ -194,6 +201,32 @@ func (e *Engine) Process(ctx context.Context, ev event.Event) {
 	for _, a := range cands {
 		e.emit(ctx, a, body)
 	}
+}
+
+// ExpectChange records a file change the agent itself is about to cause
+// (quarantine removes a file, rollback restores it), so the resulting file
+// event does not raise an anomaly. Matching on the content hash means an
+// attacker re-creating the path with different content is still detected.
+func (e *Engine) ExpectChange(path, sha256 string, ttl time.Duration) {
+	e.selfMu.Lock()
+	defer e.selfMu.Unlock()
+	e.self[path+"\x00"+sha256] = e.now().Add(ttl)
+}
+
+func (e *Engine) selfInflicted(ev *event.Event) bool {
+	if ev.TargetFilename == "" || ev.Sha256 == "" {
+		return false
+	}
+	e.selfMu.Lock()
+	defer e.selfMu.Unlock()
+	now := e.now()
+	for k, exp := range e.self {
+		if now.After(exp) {
+			delete(e.self, k)
+		}
+	}
+	_, ok := e.self[ev.TargetFilename+"\x00"+ev.Sha256]
+	return ok
 }
 
 func (e *Engine) countMetrics(ev *event.Event) {
